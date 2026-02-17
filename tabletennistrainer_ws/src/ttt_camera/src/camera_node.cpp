@@ -39,10 +39,21 @@ public:
         RCLCPP_INFO(this->get_logger(), "Camera opened successfully!");
 
 		// set camera properties
-		cap_.set(cv::CAP_PROP_FRAME_WIDTH, width);
-		cap_.set(cv::CAP_PROP_FRAME_HEIGHT, height);
-		cap_.set(cv::CAP_PROP_FPS, fps);
-		cap_.set(cv::CAP_PROP_BUFFERSIZE, 1);
+		std::string pipeline = 
+            "v4l2src device=" + device + " ! "
+            "video/x-raw, format=GRAY8, width=" + std::to_string(width) + 
+            ", height=" + std::to_string(height) + ", framerate=" + 
+            std::to_string(fps) + "/1 ! appsink drop=true sync=false";
+
+        RCLCPP_INFO(this->get_logger(), "Pipeline: %s", pipeline.c_str());
+
+        // open camera using GStreamer backend
+        cap_.open(pipeline, cv::CAP_GSTREAMER);
+
+        if (!cap_.isOpened()) {
+            RCLCPP_ERROR(this->get_logger(), "Failed to open camera with pipeline!");
+            throw std::runtime_error("Camera open failed");
+        }
 
 		// get actual vals
 		int actual_width = cap_.get(cv::CAP_PROP_FRAME_WIDTH);

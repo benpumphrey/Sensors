@@ -18,4 +18,5 @@ if [ -f build/compile_commands.json ]; then
     echo "LSP database updated."
 fi
 
+
 echo "Build Complete. Run 'source install/setup.bash' to update your environment."

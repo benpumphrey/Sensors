@@ -18,14 +18,15 @@ find_package(OpenCV REQUIRED)
 # -------------------------------------------------------------
 # 1. Ball Detector Node (Pure OpenCV)
 # -------------------------------------------------------------
-add_executable(ball_detector_node src/ball_detector_node.cpp)
+add_executable(vision_node src/vision_node.cpp)
 
 # Link standard OpenCV include directories and libraries
-target_include_directories(ball_detector_node PUBLIC ${OpenCV_INCLUDE_DIRS})
-target_link_libraries(ball_detector_node ${OpenCV_LIBS})
+target_include_directories(vision_node PUBLIC ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(vision_node ${OpenCV_LIBS})
 
 # Link ROS 2 packages
-ament_target_dependencies(ball_detector_node
+ament_target_dependencies(vision_node
+  ttt_msgs
   rclcpp
   sensor_msgs
   cv_bridge
@@ -36,7 +37,7 @@ ament_target_dependencies(ball_detector_node
 # Install Executables
 # -------------------------------------------------------------
 install(TARGETS
-  ball_detector_node
+  vision_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

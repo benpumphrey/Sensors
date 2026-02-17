@@ -14,7 +14,21 @@ def generate_launch_description():
                 'width': 1280,
                 'height': 720,
                 'fps': 120,
-                'show_window': True  # Enable window
+                'show_window': False  # Enable window
+            }],
+            output='screen'
+        ),
+        # Left Vision Tracker
+        Node(
+            package='ttt_vision',
+            executable='vision_node',
+            name='vision_left',
+            parameters=[{
+                'camera_id': 'left',
+                'debug_mode': True,
+                'blur_size': 5,
+                'min_brightness': 30,
+                'min_radius': 3
             }],
             output='screen'
         )
