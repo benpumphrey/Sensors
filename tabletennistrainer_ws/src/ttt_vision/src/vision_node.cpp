@@ -38,40 +38,33 @@ public:
             annotated_topic, 10
         );
 
-        cv::namedWindow("Vision Tracker", cv::WINDOW_NORMAL);
-
-        RCLCPP_INFO(this->get_logger(), "Vision Node running. No max radius limit.");
+        RCLCPP_INFO(this->get_logger(), "Vision Node [%s] initialized at full resolution.", camera_id_.c_str());
     }
 
+private:
     void imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
     {
-        // 1. FAST MEMORY ACCESS: Point to the existing ROS buffer instead of copying it.
         cv_bridge::CvImageConstPtr cv_ptr;
         try {
             cv_ptr = cv_bridge::toCvShare(msg, sensor_msgs::image_encodings::MONO8);
-        }
-        catch (cv_bridge::Exception& e) {
-            RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
+        } catch (cv_bridge::Exception& e) {
+            RCLCPP_ERROR(this->get_logger(), "c_bridge exception: %s", e.what());
             return;
         }
 
         cv::Mat frame = cv_ptr->image;
         if (frame.empty()) return;
 
-        cv::Mat small_frame;
-        cv::resize(frame, small_frame, cv::Size(), 0.5, 0.5, cv::INTER_NEAREST);
-
-    
         cv::Mat annotated_frame;
-        cv::cvtColor(small_frame, annotated_frame, cv::COLOR_GRAY2BGR);
+        cv::cvtColor(frame, annotated_frame, cv::COLOR_GRAY2BGR);
 
         cv::Mat blurred;
-        cv::GaussianBlur(small_frame, blurred, cv::Size(blur_size_, blur_size_), 0, 0);
+        cv::GaussianBlur(frame, blurred, cv::Size(blur_size_, blur_size_), 0, 0);
 
         std::vector<cv::Vec3f> circles;
         cv::HoughCircles(blurred, circles, cv::HOUGH_GRADIENT, 1,
-            small_frame.rows / 8, 100, 20,
-            min_radius_ / 2, 0); // min_radius scaled for downsampling
+                         frame.rows / 8, 100, 20,
+                         min_radius_, 0);
 
         auto detection_msg = ttt_msgs::msg::BallDetection();
         detection_msg.header = msg->header;
@@ -84,15 +77,14 @@ public:
                 cv::Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
                 int radius = cvRound(circles[i][2]);
 
-                // ROI check on the small frame to find the ball's brightness
                 int x = std::max(0, center.x - radius);
                 int y = std::max(0, center.y - radius);
-                int w = std::min(2 * radius, small_frame.cols - x);
-                int h = std::min(2 * radius, small_frame.rows - y);
+                int w = std::min(2 * radius, frame.cols - x);
+                int h = std::min(2 * radius, frame.rows - y);
 
                 if (w > 0 && h > 0) {
                     cv::Rect roi(x, y, w, h);
-                    cv::Scalar avg = cv::mean(small_frame(roi));
+                    cv::Scalar avg = cv::mean(frame(roi));
                     if (avg[0] > max_brightness) {
                         max_brightness = avg[0];
                         brightest_idx = i;
@@ -102,45 +94,34 @@ public:
         }
 
         if (brightest_idx != -1 && max_brightness >= min_brightness_) {
-            float best_x_small = circles[brightest_idx][0];
-            float best_y_small = circles[brightest_idx][1];
-            float best_r_small = circles[brightest_idx][2];
+            float best_x = circles[brightest_idx][0];
+            float best_y = circles[brightest_idx][1];
+            float best_r = circles[brightest_idx][2];
 
-            // Map back to the original 1280x720 resolution for other ROS nodes
-            detection_msg.x = best_x_small * 2.0;
-            detection_msg.y = best_y_small * 2.0;
-            detection_msg.radius = best_r_small * 2.0;
+            detection_msg.x = best_x;
+            detection_msg.y = best_y;
+            detection_msg.radius = best_r;
             detection_msg.confidence = max_brightness / 255.0;
 
-            // Draw the tracking box and current brightness value on the screen
-            cv::Point top_left(best_x_small - best_r_small, best_y_small - best_r_small);
-            cv::Point bottom_right(best_x_small + best_r_small, best_y_small + best_r_small);
-            cv::rectangle(annotated_frame, top_left, bottom_right, cv::Scalar(0, 255, 0), 2);
-
-            std::string hud_text = "BRIGHT: " + std::to_string(max_brightness);
-            cv::putText(annotated_frame, hud_text,
-                cv::Point(best_x_small - best_r_small, best_y_small - best_r_small - 10),
-                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 2);
-
             if (debug_mode_) {
-                RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 500,
-                    "Tracking: X:%.1f Y:%.1f (Brightness: %d)",
-                    detection_msg.x, detection_msg.y, max_brightness);
+                cv::Point center(cvRound(best_x), cvRound(best_y));
+                int r = cvRound(best_r);
+                cv::circle(annotated_frame, center, r, cv::Scalar(0, 255, 0), 2);
+
+                std::string hud = "BRIGHT: " + std::to_string(max_brightness);
+                cv::putText(annotated_frame, hud, cv::Point(center.x - r, center.y - r - 10),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 1);
             }
-        }
-        else {
-            // Clear detection if ball is lost or too dim
+        } else {
             detection_msg.x = -1.0;
             detection_msg.y = -1.0;
             detection_msg.radius = 0.0;
             detection_msg.confidence = 0.0;
         }
 
-        // Send the 3D-ready 2D coordinates to the network
         detection_pub_->publish(detection_msg);
 
         if (debug_mode_) {
-            // Auto-create window if it doesn't exist
             if (cv::getWindowProperty("Vision Tracker", cv::WND_PROP_VISIBLE) < 1) {
                 cv::namedWindow("Vision Tracker", cv::WINDOW_NORMAL);
             }
@@ -148,6 +129,8 @@ public:
             cv::waitKey(1);
         }
     }
+
+    // --- Private Members ---
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub_;
     rclcpp::Publisher<ttt_msgs::msg::BallDetection>::SharedPtr detection_pub_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr annotated_pub_;
@@ -164,9 +147,8 @@ int main(int argc, char** argv)
     rclcpp::init(argc, argv);
     try {
         rclcpp::spin(std::make_shared<VisionNode>());
-    }
-    catch (const std::exception& e) {
-        return 1;
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Exception in VisionNode: %s", e.what());
     }
     rclcpp::shutdown();
     return 0;

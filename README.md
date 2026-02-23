@@ -87,7 +87,7 @@ Each package in the `src/` directory is designed with **Modularity** in mind and
 * **Type:** System Orchestrator.
 * **Function:** Contains Python launch scripts. Allows for start of the entire system with a single command.
 
-## 🌐 System Topology
+## System Topology
 
 ### Jetson A (`insert IP address here`)
 - **Nodes:** `camera_left`, `ball_detector_left`, `stereo_fusion`, `predictor`, `ik_solver`, `stm32_bridge`.
