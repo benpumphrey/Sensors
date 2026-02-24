@@ -35,7 +35,7 @@ The project utilizes a distributed hardware stack to minimize processing latency
 
 ### **Hardware Components**
 * **Compute:** 2x NVIDIA Jetson Nano (Developer Kit).
-* **Vision:** 2x Arducam OV2311 (Global Shutter, MIPI CSI-2).
+* **Vision:** 2x Arducam OV9281 (Global Shutter, MIPI CSI-2).
 * **Microcontroller:** STM32 (connected via Ethernet).
 * **Actuation:** add section here @mech team.
 * **Networking:** Gigabit Ethernet Switch.
@@ -44,7 +44,7 @@ The project utilizes a distributed hardware stack to minimize processing latency
 ### **Hardware Mapping**
 | Component | Connection | Purpose |
 | :--- | :--- | :--- |
-| **Arducams** | MIPI CSI-2 | 120 FPS Global Shutter image capture at 1280x720 resolution. |
+| **Arducams** | MIPI CSI-2 | 240 FPS Global Shutter image capture at 640x400 resolution. |
 | **Jetson A ↔ B** | Ethernet (Static IP) | Sharing 2D ball coordinates for stereo fusion. |
 | **Jetson A ↔ STM32** | Ethernet (UDP) | Sending joint angles to the arm at high frequency. |
 | **STM32 ↔ Motors** | PWM / Step-Dir | Direct electrical control of the arm. |
@@ -62,7 +62,7 @@ Each package in the `src/` directory is designed with **Modularity** in mind and
 ### **2. ttt_camera**
 * **Type:** Hardware Driver.
 * **Function:** Interfaces with the MIPI CSI-2 ports on the Jetson. It uses a hardware-accelerated GStreamer pipeline to provide raw grayscale frames.
-* **Output:** `sensor_msgs/Image` (120 FPS).
+* **Output:** `sensor_msgs/Image` (240 FPS).
 
 ### **3. ttt_vision**
 * **Type:** Perception Engine.
@@ -110,8 +110,7 @@ ttt_vision/
 │   └── ttt_vision/         # Header files
 │       └── ball_math.hpp   # Declarations and shared logic
 ├── src/
-│   ├── ball_detector.cpp   # Node implementation
-│   └── ball_tracker.cpp    # Node implementation
+│   └── vision_node.cpp   # Node implementation
 └── msg/                    # (Only in ttt_msgs) Custom data types
 
 ```
