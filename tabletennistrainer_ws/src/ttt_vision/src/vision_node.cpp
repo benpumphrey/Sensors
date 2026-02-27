@@ -16,11 +16,11 @@ public:
         this->declare_parameter("max_radius", 50);
         this->declare_parameter("show_window", false);
 
-        camera_id_      = this->get_parameter("camera_id").as_string();
+        camera_id_ = this->get_parameter("camera_id").as_string();
         min_brightness_ = this->get_parameter("min_brightness").as_int();
-        min_radius_     = this->get_parameter("min_radius").as_int();
-        max_radius_     = this->get_parameter("max_radius").as_int();
-        show_window_    = this->get_parameter("show_window").as_bool();
+        min_radius_ = this->get_parameter("min_radius").as_int();
+        max_radius_ = this->get_parameter("max_radius").as_int();
+        show_window_ = this->get_parameter("show_window").as_bool();
 
         // Pre-allocate CUDA Gaussian Filter to avoid re-creating it every frame
         gaussian_filter_ = cv::cuda::createGaussianFilter(
@@ -77,25 +77,37 @@ private:
         for (const auto& c : circles) {
             cv::Rect roi(
                 cvRound(c[0] - c[2]), cvRound(c[1] - c[2]),
-                cvRound(c[2] * 2),    cvRound(c[2] * 2));
+                cvRound(c[2] * 2), cvRound(c[2] * 2));
 
             // Boundary check
             if (roi.x >= 0 && roi.y >= 0 &&
-                roi.x + roi.width  <= cv_ptr->image.cols &&
+                roi.x + roi.width <= cv_ptr->image.cols &&
                 roi.y + roi.height <= cv_ptr->image.rows)
             {
                 cv::Scalar avg = cv::mean(cv_ptr->image(roi));
                 if (avg[0] > max_bright && avg[0] >= min_brightness_) {
                     max_bright = avg[0];
-                    detect_msg.x          = c[0];
-                    detect_msg.y          = c[1];
-                    detect_msg.radius     = c[2];
+                    detect_msg.x = c[0];
+                    detect_msg.y = c[1];
+                    detect_msg.radius = c[2];
                     detect_msg.confidence = max_bright / 255.0f;
                 }
             }
         }
 
         detection_pub_->publish(detect_msg);
+
+        // Print detection result
+        if (detect_msg.x >= 0) {
+            RCLCPP_INFO(this->get_logger(),
+                "[%s] Ball detected | x: %.1f  y: %.1f  radius: %.1f  conf: %.2f",
+                camera_id_.c_str(), detect_msg.x, detect_msg.y,
+                detect_msg.radius, detect_msg.confidence);
+        }
+        else {
+            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                "[%s] No ball detected", camera_id_.c_str());
+        }
 
         // 6. Optional debug window (CPU only — no need to touch GPU for display)
         if (show_window_) {
@@ -106,14 +118,14 @@ private:
                 cv::Point center(cvRound(detect_msg.x), cvRound(detect_msg.y));
                 int radius = cvRound(detect_msg.radius);
                 // Outer circle (green)
-                cv::circle(display, center, radius, {0, 255, 0}, 2);
+                cv::circle(display, center, radius, { 0, 255, 0 }, 2);
                 // Center dot (red)
-                cv::circle(display, center, 2, {0, 0, 255}, -1);
+                cv::circle(display, center, 2, { 0, 0, 255 }, -1);
                 // Confidence label
                 std::string label = cv::format("conf: %.2f", detect_msg.confidence);
                 cv::putText(display, label,
-                    {center.x - radius, center.y - radius - 5},
-                    cv::FONT_HERSHEY_SIMPLEX, 0.4, {0, 255, 0}, 1);
+                    { center.x - radius, center.y - radius - 5 },
+                    cv::FONT_HERSHEY_SIMPLEX, 0.4, { 0, 255, 0 }, 1);
             }
 
             cv::imshow("Vision - " + camera_id_, display);
