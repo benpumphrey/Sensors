@@ -1,6 +1,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/opencv.hpp>
 #include <chrono>
@@ -24,12 +25,15 @@ public:
         // 1. v4l2src pulls MJPEG from the OV9281
         // 2. nvv4l2decoder decodes MJPEG on the Jetson Hardware Decoder
         // 3. nvvidconv converts to GRAY8 (mono8)
+
         std::string pipeline =
-            "v4l2src device=" + device + " io-mode=2 ! "
+            "v4l2src device=" + device + " io-mode=2 "
+            "extra-controls=\"s,exposure=800,analogue_gain=1000\" ! " // Matches your list
             "video/x-raw, format=GRAY8, width=" + std::to_string(width) +
             ", height=" + std::to_string(height) +
             ", framerate=" + std::to_string(fps) + "/1 ! "
-            "nvvidconv ! video/x-raw, format=GRAY8 ! appsink drop=true sync=false";
+            "nvvidconv flip-method=2 ! "
+            "video/x-raw, format=GRAY8 ! appsink drop=true sync=false";
 
         RCLCPP_INFO(this->get_logger(), "Launching Pipeline: %s", pipeline.c_str());
         cap_.open(pipeline, cv::CAP_GSTREAMER);
@@ -43,6 +47,9 @@ public:
             "/camera/" + camera_id_ + "/image_raw", 10);
         camera_info_pub_ = this->create_publisher<sensor_msgs::msg::CameraInfo>(
             "/camera/" + camera_id_ + "/camera_info", 10);
+
+        compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>(
+            "/camera/" + camera_id_ + "/compressed", 10);
 
         // 240 FPS = ~4.16ms per frame
         timer_ = this->create_wall_timer(
@@ -73,6 +80,18 @@ private:
         info_msg.header = msg->header;
         camera_info_pub_->publish(info_msg);
 
+        static int throttle_count = 0;
+        if (throttle_count++ % 4 == 0) {
+            auto comp_msg = sensor_msgs::msg::CompressedImage();
+            comp_msg.header.stamp = this->now();
+            comp_msg.header.frame_id = camera_id_ + "_optical_frame";
+            comp_msg.format = "jpeg";
+
+            // Quality 70 is the sweet spot for speed vs clarity
+            cv::imencode(".jpg", frame, comp_msg.data, { cv::IMWRITE_JPEG_QUALITY, 70 });
+            compressed_pub_->publish(comp_msg);
+        }
+
         frame_count_++;
     }
 
@@ -85,6 +104,7 @@ private:
     cv::VideoCapture cap_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr image_pub_;
     rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr compressed_pub_;
     rclcpp::TimerBase::SharedPtr timer_, fps_timer_;
     std::string camera_id_;
     size_t frame_count_;

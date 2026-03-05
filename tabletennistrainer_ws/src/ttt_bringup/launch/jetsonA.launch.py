@@ -47,30 +47,30 @@ def generate_launch_description():
         ),
 
         # Stereo Vision
-#        Node (
-#            package='ttt_stereo',
-#            executable='stereo_node',
-#            parameters=[{
-#                'baseline_m': 1.5,
-#                'fx': 224.1,
-#                'fy': 200.0,
-#                'cx': 320.0,
-#                'cy': 200.0,
-#            }],
-#        ),
-#
-#        Node(
-#            package='ttt_trajectory',
-#            executable='trajectory_node',
-#            name='trajectory_node',
-#            parameters=[{
-#                'lookahead_ms': 250,
-#                'min_samples': 5,
-#                'max_samples': 20,
-#                'gravity': 9.81,
-#                'table_y': -0.5,    # tune this to your camera mount height
-#                'restitution': 0.85,
-#            }],
-#            output='screen'
-#        ),
+       Node (
+           package='ttt_stereo',
+           executable='stereo_node',
+           parameters=[{
+               'baseline_m': 1.5,
+               'fx': 224.1,
+               'fy': 200.0,
+               'cx': 320.0,
+               'cy': 200.0,
+           }],
+       ),
+
+       Node(
+           package='ttt_trajectory',
+           executable='trajectory_node',
+           name='trajectory_node',
+           parameters=[{
+               'lookahead_ms': 250,
+               'min_samples': 5,
+               'max_samples': 20,
+               'gravity': 9.81,
+               'table_y': -0.5,    # tune this to your camera mount height
+               'restitution': 0.85,
+           }],
+           output='screen'
+       ),
     ])
