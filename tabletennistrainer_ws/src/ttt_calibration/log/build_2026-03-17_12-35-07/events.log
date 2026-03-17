@@ -1,0 +1,205 @@
+[0.000000] (-) TimerEvent: {}
+[0.001067] (ttt_calibration) JobQueued: {'identifier': 'ttt_calibration', 'dependencies': OrderedDict()}
+[0.001430] (ttt_calibration) JobStarted: {'identifier': 'ttt_calibration'}
+[0.013378] (ttt_calibration) JobProgress: {'identifier': 'ttt_calibration', 'progress': 'cmake'}
+[0.014693] (ttt_calibration) JobProgress: {'identifier': 'ttt_calibration', 'progress': 'build'}
+[0.016040] (ttt_calibration) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/capstone-nano2/TTT-Capstone-Sensors/tabletennistrainer_ws/src/ttt_calibration/build/ttt_calibration', '--', '-j6', '-l6'], 'cwd': '/home/capstone-nano2/TTT-Capstone-Sensors/tabletennistrainer_ws/src/ttt_calibration/build/ttt_calibration', 'env': OrderedDict([('LESSOPEN', '| /usr/bin/lesspipe %s'), ('USER', 'capstone-nano2'), ('SSH_CLIENT', '172.20.121.89 56406 22'), ('XDG_SESSION_TYPE', 'tty'), ('SHLVL', '1'), ('LD_LIBRARY_PATH', '/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/aarch64-linux-gnu:/opt/ros/humble/lib'), ('MOTD_SHOWN', 'pam'), ('HOME', '/home/capstone-nano2'), ('CYCLONEDDS_URI', 'file:///home/capstone-nano2/dds_config.xml'), ('OLDPWD', '/home/capstone-nano2/TTT-Capstone-Sensors/tabletennistrainer_ws/src'), ('SSH_TTY', '/dev/pts/3'), ('ROS_PYTHON_VERSION', '3'), ('ROS_IP', '192.168.1.20'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('LC_TERMINAL_VERSION', '3.6.6'), ('ROS_DISTRO', 'humble'), ('LOGNAME', 'capstone-nano2'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('TERM', 'xterm-256color'), ('XDG_SESSION_ID', '3'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/home/capstone-nano2/.local/bin:/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('LANG', 'en_US.UTF-8'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('ROS_DOMAIN_ID', '42'), ('AMENT_PREFIX_PATH', '/opt/ros/humble'), ('SHELL', '/bin/bash'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('LC_TERMINAL', 'iTerm2'), ('PWD', '/home/capstone-nano2/TTT-Capstone-Sensors/tabletennistrainer_ws/src/ttt_calibration/build/ttt_calibration'), ('LC_ALL', 'en_US.UTF-8'), ('SSH_CONNECTION', '172.20.121.89 56406 172.20.35.111 22'), ('XDG_DATA_DIRS', '/usr/share/gnome:/usr/local/share:/usr/share:/var/lib/snapd/desktop'), ('PYTHONPATH', '/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('COLCON', '1'), ('CMAKE_PREFIX_PATH', '/opt/ros/humble')]), 'shell': False}
+[0.090502] (ttt_calibration) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target tf_broadcaster_node\x1b[0m\n'}
+[0.092221] (ttt_calibration) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target table_calibrator_node\x1b[0m\n'}
+[0.099070] (-) TimerEvent: {}
+[0.129341] (ttt_calibration) StdoutLine: {'line': b'[ 50%] Built target tf_broadcaster_node\n'}
+[0.135666] (ttt_calibration) StdoutLine: {'line': b'[ 75%] \x1b[32mBuilding CXX object CMakeFiles/table_calibrator_node.dir/src/table_calibrator_node.cpp.o\x1b[0m\n'}
+[0.199254] (-) TimerEvent: {}
+[0.300113] (-) TimerEvent: {}
+[0.400972] (-) TimerEvent: {}
+[0.501665] (-) TimerEvent: {}
+[0.602324] (-) TimerEvent: {}
+[0.703131] (-) TimerEvent: {}
+[0.803863] (-) TimerEvent: {}
+[0.904583] (-) TimerEvent: {}
+[1.005225] (-) TimerEvent: {}
+[1.105847] (-) TimerEvent: {}
+[1.206523] (-) TimerEvent: {}
+[1.307187] (-) TimerEvent: {}
+[1.407890] (-) TimerEvent: {}
+[1.508566] (-) TimerEvent: {}
+[1.609237] (-) TimerEvent: {}
+[1.709909] (-) TimerEvent: {}
+[1.810586] (-) TimerEvent: {}
+[1.911254] (-) TimerEvent: {}
+[2.012013] (-) TimerEvent: {}
+[2.112698] (-) TimerEvent: {}
+[2.213353] (-) TimerEvent: {}
+[2.314011] (-) TimerEvent: {}
+[2.414724] (-) TimerEvent: {}
+[2.515434] (-) TimerEvent: {}
+[2.616080] (-) TimerEvent: {}
+[2.716742] (-) TimerEvent: {}
+[2.817415] (-) TimerEvent: {}
+[2.918068] (-) TimerEvent: {}
+[3.018751] (-) TimerEvent: {}
+[3.119429] (-) TimerEvent: {}
+[3.220160] (-) TimerEvent: {}
+[3.320867] (-) TimerEvent: {}
+[3.422185] (-) TimerEvent: {}
+[3.522982] (-) TimerEvent: {}
+[3.623749] (-) TimerEvent: {}
+[3.724414] (-) TimerEvent: {}
+[3.825087] (-) TimerEvent: {}
+[3.925751] (-) TimerEvent: {}
+[4.026433] (-) TimerEvent: {}
+[4.127095] (-) TimerEvent: {}
+[4.227789] (-) TimerEvent: {}
+[4.328513] (-) TimerEvent: {}
+[4.429477] (-) TimerEvent: {}
+[4.530138] (-) TimerEvent: {}
+[4.630817] (-) TimerEvent: {}
+[4.731591] (-) TimerEvent: {}
+[4.832320] (-) TimerEvent: {}
+[4.933177] (-) TimerEvent: {}
+[5.033895] (-) TimerEvent: {}
+[5.134569] (-) TimerEvent: {}
+[5.235315] (-) TimerEvent: {}
+[5.336118] (-) TimerEvent: {}
+[5.436884] (-) TimerEvent: {}
+[5.537724] (-) TimerEvent: {}
+[5.638575] (-) TimerEvent: {}
+[5.739448] (-) TimerEvent: {}
+[5.840284] (-) TimerEvent: {}
+[5.941113] (-) TimerEvent: {}
+[6.041953] (-) TimerEvent: {}
+[6.142777] (-) TimerEvent: {}
+[6.243648] (-) TimerEvent: {}
+[6.344528] (-) TimerEvent: {}
+[6.445396] (-) TimerEvent: {}
+[6.546237] (-) TimerEvent: {}
+[6.647056] (-) TimerEvent: {}
+[6.747924] (-) TimerEvent: {}
+[6.848764] (-) TimerEvent: {}
+[6.949667] (-) TimerEvent: {}
+[7.050542] (-) TimerEvent: {}
+[7.151414] (-) TimerEvent: {}
+[7.252271] (-) TimerEvent: {}
+[7.353121] (-) TimerEvent: {}
+[7.453964] (-) TimerEvent: {}
+[7.554917] (-) TimerEvent: {}
+[7.638847] (ttt_calibration) StderrLine: {'line': b'\x1b[01m\x1b[K/home/capstone-nano2/TTT-Capstone-Sensors/tabletennistrainer_ws/src/ttt_calibration/src/table_calibrator_node.cpp:\x1b[m\x1b[K In constructor \xe2\x80\x98\x1b[01m\x1b[KTableCalibratorNode::TableCalibratorNode()\x1b[m\x1b[K\xe2\x80\x99:\n'}
+[7.639733] (ttt_calibration) StderrLine: {'line': b'\x1b[01m\x1b[K/home/capstone-nano2/TTT-Capstone-Sensors/tabletennistrainer_ws/src/ttt_calibration/src/table_calibrator_node.cpp:28:80:\x1b[m\x1b[K \x1b[01;31m\x1b[Kerror: \x1b[m\x1b[Kno match for \xe2\x80\x98\x1b[01m\x1b[Koperator=\x1b[m\x1b[K\xe2\x80\x99 (operand types are \xe2\x80\x98\x1b[01m\x1b[Kcv::Ptr<cv::aruco::Dictionary>\x1b[m\x1b[K\xe2\x80\x99 and \xe2\x80\x98\x1b[01m\x1b[Kcv::aruco::Dictionary\x1b[m\x1b[K\xe2\x80\x99)\n'}
+[7.639986] (ttt_calibration) StderrLine: {'line': b'   28 |         aruco_dict_ = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50\x1b[01;31m\x1b[K)\x1b[m\x1b[K;\n'}
+[7.640199] (ttt_calibration) StderrLine: {'line': b'      |                                                                                \x1b[01;31m\x1b[K^\x1b[m\x1b[K\n'}
+[7.640394] (ttt_calibration) StderrLine: {'line': b'In file included from \x1b[01m\x1b[K/usr/include/opencv4/opencv2/core/cvstd.hpp:81\x1b[m\x1b[K,\n'}
+[7.640583] (ttt_calibration) StderrLine: {'line': b'                 from \x1b[01m\x1b[K/usr/include/opencv4/opencv2/core/base.hpp:58\x1b[m\x1b[K,\n'}
+[7.640796] (ttt_calibration) StderrLine: {'line': b'                 from \x1b[01m\x1b[K/usr/include/opencv4/opencv2/core.hpp:53\x1b[m\x1b[K,\n'}
+[7.640980] (ttt_calibration) StderrLine: {'line': b'                 from \x1b[01m\x1b[K/usr/include/opencv4/opencv2/core/core.hpp:48\x1b[m\x1b[K,\n'}
+[7.641157] (ttt_calibration) StderrLine: {'line': b'                 from \x1b[01m\x1b[K/opt/ros/humble/include/cv_bridge/cv_bridge/cv_bridge.h:43\x1b[m\x1b[K,\n'}
+[7.641335] (ttt_calibration) StderrLine: {'line': b'                 from \x1b[01m\x1b[K/home/capstone-nano2/TTT-Capstone-Sensors/tabletennistrainer_ws/src/ttt_calibration/src/table_calibrator_node.cpp:4\x1b[m\x1b[K:\n'}
+[7.641510] (ttt_calibration) StderrLine: {'line': b'\x1b[01m\x1b[K/usr/include/opencv4/opencv2/core/cvstd_wrapper.hpp:122:38:\x1b[m\x1b[K \x1b[01;36m\x1b[Knote: \x1b[m\x1b[Kcandidate: \xe2\x80\x98\x1b[01m\x1b[Ktemplate<class Y> cv::Ptr<T>& cv::Ptr<T>::operator=(const cv::Ptr<Y>&) [with Y = Y; T = cv::aruco::Dictionary]\x1b[m\x1b[K\xe2\x80\x99\n'}
+[7.641688] (ttt_calibration) StderrLine: {'line': b'  122 |     template<typename Y> inline Ptr& \x1b[01;36m\x1b[Koperator\x1b[m\x1b[K=(const Ptr<Y>& o) { std::shared_ptr<T>::operator =(o); return *this; }\n'}
+[7.641867] (ttt_calibration) StderrLine: {'line': b'      |                                      \x1b[01;36m\x1b[K^~~~~~~~\x1b[m\x1b[K\n'}
+[7.642039] (ttt_calibration) StderrLine: {'line': b'\x1b[01m\x1b[K/usr/include/opencv4/opencv2/core/cvstd_wrapper.hpp:122:38:\x1b[m\x1b[K \x1b[01;36m\x1b[Knote: \x1b[m\x1b[K  template argument deduction/substitution failed:\n'}
+[7.642210] (ttt_calibration) StderrLine: {'line': b'\x1b[01m\x1b[K/home/capstone-nano2/TTT-Capstone-Sensors/tabletennistrainer_ws/src/ttt_calibration/src/table_calibrator_node.cpp:28:80:\x1b[m\x1b[K \x1b[01;36m\x1b[Knote: \x1b[m\x1b[K  \xe2\x80\x98\x1b[01m\x1b[Kcv::aruco::Dictionary\x1b[m\x1b[K\xe2\x80\x99 is not derived from \xe2\x80\x98\x1b[01m\x1b[Kconst cv::Ptr<_Tp>\x1b[m\x1b[K\xe2\x80\x99\n'}
+[7.642388] (ttt_calibration) StderrLine: {'line': b'   28 |         aruco_dict_ = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_50\x1b[01;36m\x1b[K)\x1b[m\x1b[K;\n'}
+[7.642559] (ttt_calibration) StderrLine: {'line': b'      |                                                                                \x1b[01;36m\x1b[K^\x1b[m\x1b[K\n'}
+[7.642727] (ttt_calibration) StderrLine: {'line': b'In file included from \x1b[01m\x1b[K/usr/include/opencv4/opencv2/core/cvstd.hpp:81\x1b[m\x1b[K,\n'}
+[7.642895] (ttt_calibration) StderrLine: {'line': b'                 from \x1b[01m\x1b[K/usr/include/opencv4/opencv2/core/base.hpp:58\x1b[m\x1b[K,\n'}
+[7.643061] (ttt_calibration) StderrLine: {'line': b'                 from \x1b[01m\x1b[K/usr/include/opencv4/opencv2/core.hpp:53\x1b[m\x1b[K,\n'}
+[7.643228] (ttt_calibration) StderrLine: {'line': b'                 from \x1b[01m\x1b[K/usr/include/opencv4/opencv2/core/core.hpp:48\x1b[m\x1b[K,\n'}
+[7.643468] (ttt_calibration) StderrLine: {'line': b'                 from \x1b[01m\x1b[K/opt/ros/humble/include/cv_bridge/cv_bridge/cv_bridge.h:43\x1b[m\x1b[K,\n'}
+[7.643694] (ttt_calibration) StderrLine: {'line': b'                 from \x1b[01m\x1b[K/home/capstone-nano2/TTT-Capstone-Sensors/tabletennistrainer_ws/src/ttt_calibration/src/table_calibrator_node.cpp:4\x1b[m\x1b[K:\n'}
+[7.643914] (ttt_calibration) StderrLine: {'line': b'\x1b[01m\x1b[K/usr/include/opencv4/opencv2/core/cvstd_wrapper.hpp:121:10:\x1b[m\x1b[K \x1b[01;36m\x1b[Knote: \x1b[m\x1b[Kcandidate: \xe2\x80\x98\x1b[01m\x1b[Kcv::Ptr<T>& cv::Ptr<T>::operator=(const cv::Ptr<T>&) [with T = cv::aruco::Dictionary]\x1b[m\x1b[K\xe2\x80\x99\n'}
+[7.644137] (ttt_calibration) StderrLine: {'line': b'  121 |     Ptr& \x1b[01;36m\x1b[Koperator\x1b[m\x1b[K=(const Ptr& o) { std::shared_ptr<T>::operator =(o); return *this; }\n'}
+[7.644398] (ttt_calibration) StderrLine: {'line': b'      |          \x1b[01;36m\x1b[K^~~~~~~~\x1b[m\x1b[K\n'}
+[7.644625] (ttt_calibration) StderrLine: {'line': b'\x1b[01m\x1b[K/usr/include/opencv4/opencv2/core/cvstd_wrapper.hpp:121:31:\x1b[m\x1b[K \x1b[01;36m\x1b[Knote: \x1b[m\x1b[K  no known conversion for argument 1 from \xe2\x80\x98\x1b[01m\x1b[Kcv::aruco::Dictionary\x1b[m\x1b[K\xe2\x80\x99 to \xe2\x80\x98\x1b[01m\x1b[Kconst cv::Ptr<cv::aruco::Dictionary>&\x1b[m\x1b[K\xe2\x80\x99\n'}
+[7.644883] (ttt_calibration) StderrLine: {'line': b'  121 |     Ptr& operator=(\x1b[01;36m\x1b[Kconst Ptr& o\x1b[m\x1b[K) { std::shared_ptr<T>::operator =(o); return *this; }\n'}
+[7.645107] (ttt_calibration) StderrLine: {'line': b'      |                    \x1b[01;36m\x1b[K~~~~~~~~~~~^\x1b[m\x1b[K\n'}
+[7.645324] (ttt_calibration) StderrLine: {'line': b'\x1b[01m\x1b[K/home/capstone-nano2/TTT-Capstone-Sensors/tabletennistrainer_ws/src/ttt_calibration/src/table_calibrator_node.cpp:29:56:\x1b[m\x1b[K \x1b[01;31m\x1b[Kerror: \x1b[m\x1b[K\xe2\x80\x98\x1b[01m\x1b[Kcreate\x1b[m\x1b[K\xe2\x80\x99 is not a member of \xe2\x80\x98\x1b[01m\x1b[Kcv::aruco::DetectorParameters\x1b[m\x1b[K\xe2\x80\x99\n'}
+[7.645585] (ttt_calibration) StderrLine: {'line': b'   29 |         aruco_params_ = cv::aruco::DetectorParameters::\x1b[01;31m\x1b[Kcreate\x1b[m\x1b[K();\n'}
+[7.645809] (ttt_calibration) StderrLine: {'line': b'      |                                                        \x1b[01;31m\x1b[K^~~~~~\x1b[m\x1b[K\n'}
+[7.655152] (-) TimerEvent: {}
+[7.756070] (-) TimerEvent: {}
+[7.856892] (-) TimerEvent: {}
+[7.957707] (-) TimerEvent: {}
+[8.058535] (-) TimerEvent: {}
+[8.159383] (-) TimerEvent: {}
+[8.260263] (-) TimerEvent: {}
+[8.361119] (-) TimerEvent: {}
+[8.461989] (-) TimerEvent: {}
+[8.562989] (-) TimerEvent: {}
+[8.663911] (-) TimerEvent: {}
+[8.764739] (-) TimerEvent: {}
+[8.865664] (-) TimerEvent: {}
+[8.966473] (-) TimerEvent: {}
+[9.067342] (-) TimerEvent: {}
+[9.168598] (-) TimerEvent: {}
+[9.269453] (-) TimerEvent: {}
+[9.370298] (-) TimerEvent: {}
+[9.471092] (-) TimerEvent: {}
+[9.571943] (-) TimerEvent: {}
+[9.672752] (-) TimerEvent: {}
+[9.773544] (-) TimerEvent: {}
+[9.874420] (-) TimerEvent: {}
+[9.975214] (-) TimerEvent: {}
+[10.076040] (-) TimerEvent: {}
+[10.176838] (-) TimerEvent: {}
+[10.277657] (-) TimerEvent: {}
+[10.378488] (-) TimerEvent: {}
+[10.479338] (-) TimerEvent: {}
+[10.580154] (-) TimerEvent: {}
+[10.681003] (-) TimerEvent: {}
+[10.781842] (-) TimerEvent: {}
+[10.882670] (-) TimerEvent: {}
+[10.983518] (-) TimerEvent: {}
+[11.084347] (-) TimerEvent: {}
+[11.185206] (-) TimerEvent: {}
+[11.286048] (-) TimerEvent: {}
+[11.386886] (-) TimerEvent: {}
+[11.487739] (-) TimerEvent: {}
+[11.588557] (-) TimerEvent: {}
+[11.689467] (-) TimerEvent: {}
+[11.790298] (-) TimerEvent: {}
+[11.891109] (-) TimerEvent: {}
+[11.991905] (-) TimerEvent: {}
+[12.092702] (-) TimerEvent: {}
+[12.193528] (-) TimerEvent: {}
+[12.294353] (-) TimerEvent: {}
+[12.395176] (-) TimerEvent: {}
+[12.496006] (-) TimerEvent: {}
+[12.596793] (-) TimerEvent: {}
+[12.697646] (-) TimerEvent: {}
+[12.798483] (-) TimerEvent: {}
+[12.899330] (-) TimerEvent: {}
+[13.000104] (-) TimerEvent: {}
+[13.100880] (-) TimerEvent: {}
+[13.201635] (-) TimerEvent: {}
+[13.302562] (-) TimerEvent: {}
+[13.403381] (-) TimerEvent: {}
+[13.504225] (-) TimerEvent: {}
+[13.604961] (-) TimerEvent: {}
+[13.705797] (-) TimerEvent: {}
+[13.806624] (-) TimerEvent: {}
+[13.907452] (-) TimerEvent: {}
+[14.008222] (-) TimerEvent: {}
+[14.108998] (-) TimerEvent: {}
+[14.209816] (-) TimerEvent: {}
+[14.310641] (-) TimerEvent: {}
+[14.411426] (-) TimerEvent: {}
+[14.512208] (-) TimerEvent: {}
+[14.613004] (-) TimerEvent: {}
+[14.713837] (-) TimerEvent: {}
+[14.814664] (-) TimerEvent: {}
+[14.915487] (-) TimerEvent: {}
+[15.016248] (-) TimerEvent: {}
+[15.117002] (-) TimerEvent: {}
+[15.217795] (-) TimerEvent: {}
+[15.318598] (-) TimerEvent: {}
+[15.419332] (-) TimerEvent: {}
+[15.520020] (-) TimerEvent: {}
+[15.620742] (-) TimerEvent: {}
+[15.721570] (-) TimerEvent: {}
+[15.822405] (-) TimerEvent: {}
+[15.859530] (ttt_calibration) StderrLine: {'line': b'gmake[2]: *** [CMakeFiles/table_calibrator_node.dir/build.make:76: CMakeFiles/table_calibrator_node.dir/src/table_calibrator_node.cpp.o] Error 1\n'}
+[15.860090] (ttt_calibration) StderrLine: {'line': b'gmake[1]: *** [CMakeFiles/Makefile2:165: CMakeFiles/table_calibrator_node.dir/all] Error 2\n'}
+[15.860906] (ttt_calibration) StderrLine: {'line': b'gmake: *** [Makefile:146: all] Error 2\n'}
+[15.865636] (ttt_calibration) CommandEnded: {'returncode': 2}
+[15.890608] (ttt_calibration) JobEnded: {'identifier': 'ttt_calibration', 'rc': 2}
+[15.893510] (-) EventReactorShutdown: {}

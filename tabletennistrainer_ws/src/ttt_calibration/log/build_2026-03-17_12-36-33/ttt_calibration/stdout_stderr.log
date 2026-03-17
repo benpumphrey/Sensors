@@ -1,0 +1,11 @@
+[35m[1mConsolidate compiler generated dependencies of target table_calibrator_node[0m
+[ 50%] Built target tf_broadcaster_node
+[ 75%] [32mBuilding CXX object CMakeFiles/table_calibrator_node.dir/src/table_calibrator_node.cpp.o[0m
+[01m[K/home/capstone-nano2/TTT-Capstone-Sensors/tabletennistrainer_ws/src/ttt_calibration/src/table_calibrator_node.cpp:[m[K In member function ‘[01m[Kvoid TableCalibratorNode::infoCallback(sensor_msgs::msg::CameraInfo_<std::allocator<void> >::SharedPtr)[m[K’:
+[01m[K/home/capstone-nano2/TTT-Capstone-Sensors/tabletennistrainer_ws/src/ttt_calibration/src/table_calibrator_node.cpp:55:70:[m[K [01;31m[Kerror: [m[K‘[01m[Kclass cv::Mat[m[K’ has no member named ‘[01m[Kclon[m[K’; did you mean ‘[01m[Kclone[m[K’?
+   55 |         camera_matrix_ = cv::Mat(3, 3, CV_64F, (void*)msg->k.data()).[01;31m[Kclon[m[K();
+      |                                                                      [01;31m[K^~~~[m[K
+      |                                                                      [32m[Kclone[m[K
+gmake[2]: *** [CMakeFiles/table_calibrator_node.dir/build.make:76: CMakeFiles/table_calibrator_node.dir/src/table_calibrator_node.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:165: CMakeFiles/table_calibrator_node.dir/all] Error 2
+gmake: *** [Makefile:146: all] Error 2

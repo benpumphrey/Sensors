@@ -16,10 +16,13 @@ from PyQt5.QtCore import QThread, pyqtSignal, Qt
 from PyQt5.QtGui import QImage, QPixmap, QFont
 
 # --- CONFIGURATION ---
-JETSON_B_IP = "192.168.1.20"
-JETSON_B_USER = "capstone-nano2"
-LOCAL_WS = "/home/capstone-nano1/TTT-Capstone-Sensors/tabletennistrainer_ws"
-REMOTE_WS = "/home/capstone-nano2/Desktop/TTT-Capstone-Sensors/tabletennistrainer_ws"
+JETSON_A_IP = "192.168.1.10"
+JETSON_A_USER = "capstone-nano1"
+
+# Nano 2 is running this script, making it the LOCAL workspace
+LOCAL_WS = "/home/capstone-nano2/TTT-Capstone-Sensors/tabletennistrainer_ws"
+# Nano 1 is the REMOTE workspace
+REMOTE_WS = "/home/capstone-nano1/TTT-Capstone-Sensors/tabletennistrainer_ws"
 
 class SystemLauncher(QThread):
     """Handles the background shell commands for startup and shutdown"""
@@ -31,22 +34,23 @@ class SystemLauncher(QThread):
 
     def run(self):
         try:
-            self.status_signal.emit("Tuning V4L2 Settings...")
+            self.status_signal.emit("Tuning Local V4L2 Settings (Jetson B)...")
             subprocess.run(["v4l2-ctl", "-d", "/dev/video0", "-c", "exposure=800", "-c", "analogue_gain=1200"])
             
-            self.status_signal.emit("Launching Jetson A (Local)...")
-            cmd_a = f"source /opt/ros/humble/setup.bash && source {LOCAL_WS}/install/setup.bash && ros2 launch ttt_bringup jetsonA.launch.py"
-            proc_a = subprocess.Popen(cmd_a, shell=True, executable='/bin/bash', preexec_fn=os.setsid)
-            self.processes.append(proc_a)
+            self.status_signal.emit("Launching Jetson B (Local)...")
+            # cmd_b runs locally on Nano 2
+            cmd_b = f"source /opt/ros/humble/setup.bash && source {LOCAL_WS}/install/setup.bash && ros2 launch ttt_bringup jetsonB.launch.py"
+            proc_b = subprocess.Popen(cmd_b, shell=True, executable='/bin/bash', preexec_fn=os.setsid)
+            self.processes.append(proc_b)
 
-            self.status_signal.emit("Connecting to Jetson B (Remote)...")
-            # We use SSH to trigger the remote launch file
-            cmd_b = (f"ssh -tt {JETSON_B_USER}@{JETSON_B_IP} "
+            self.status_signal.emit("Connecting to Jetson A (Remote)...")
+            # cmd_a uses SSH to trigger Nano 1
+            cmd_a = (f"ssh -tt {JETSON_A_USER}@{JETSON_A_IP} "
                      f"'v4l2-ctl -d /dev/video0 -c exposure=800 -c analogue_gain=1200; "
                      f"source /opt/ros/humble/setup.bash; source {REMOTE_WS}/install/setup.bash; "
-                     f"ros2 launch ttt_bringup jetsonB.launch.py'")
-            proc_b = subprocess.Popen(cmd_b, shell=True, preexec_fn=os.setsid)
-            self.processes.append(proc_b)
+                     f"ros2 launch ttt_bringup jetsonA.launch.py'")
+            proc_a = subprocess.Popen(cmd_a, shell=True, preexec_fn=os.setsid)
+            self.processes.append(proc_a)
 
             self.status_signal.emit("System Online. Waiting for ROS stabilization...")
             time.sleep(2)
@@ -55,12 +59,15 @@ class SystemLauncher(QThread):
 
     def stop(self):
         self.status_signal.emit("Shutting down nodes...")
-        # Kill local processes
+        # Kill local processes (Jetson B)
         for p in self.processes:
-            os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+            try:
+                os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+            except:
+                pass
         
-        # Kill remote processes on Jetson B
-        subprocess.run(["ssh", f"{JETSON_B_USER}@{JETSON_B_IP}", "pkill -f ttt_bringup"])
+        # Kill remote processes on Jetson A
+        subprocess.run(["ssh", f"{JETSON_A_USER}@{JETSON_A_IP}", "pkill -f ttt_bringup"])
         self.status_signal.emit("System Offline.")
 
 class ROSWorker(QThread):
@@ -72,12 +79,9 @@ class ROSWorker(QThread):
             rclpy.init()
         self.node = Node('marty_dashboard_node')
         qos = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, depth=1)
-
-        # Matched to your C++ CameraNode topics
         self.node.create_subscription(CompressedImage, '/camera/left/compressed', self.left_callback, qos)
         self.node.create_subscription(CompressedImage, '/camera/right/compressed', self.right_callback, qos)
-        
-        # Matched to your StereoNode output
+
         self.node.create_subscription(PointStamped, '/ball_position_3d', self.stereo_callback, qos)
         
         rclpy.spin(self.node)
