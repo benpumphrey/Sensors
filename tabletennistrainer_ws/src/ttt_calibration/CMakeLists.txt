@@ -1,33 +1,62 @@
 cmake_minimum_required(VERSION 3.8)
 project(ttt_calibration)
 
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 
+# Find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
-find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
-# 1. Original TF Broadcaster (Keep this for manual overrides/robot base)
+# ArUco Table Calibration Node
+add_executable(aruco_table_calibration_node src/aruco_table_calibration_node.cpp)
+
+ament_target_dependencies(aruco_table_calibration_node
+  rclcpp
+  sensor_msgs
+  geometry_msgs
+  cv_bridge
+  tf2_ros
+  tf2_geometry_msgs
+)
+
+target_link_libraries(aruco_table_calibration_node
+  ${OpenCV_LIBS}
+  yaml-cpp
+)
+
+# TF Broadcaster Node (keep existing)
 add_executable(tf_broadcaster_node src/tf_broadcaster_node.cpp)
-ament_target_dependencies(tf_broadcaster_node rclcpp geometry_msgs tf2_ros tf2_geometry_msgs)
 
-# 2. NEW Auto-Calibrator Node
-add_executable(table_calibrator_node src/table_calibrator_node.cpp)
-target_include_directories(table_calibrator_node PRIVATE ${OpenCV_INCLUDE_DIRS})
-ament_target_dependencies(table_calibrator_node rclcpp sensor_msgs geometry_msgs tf2_ros cv_bridge)
-target_link_libraries(table_calibrator_node ${OpenCV_LIBRARIES})
+ament_target_dependencies(tf_broadcaster_node
+  rclcpp
+  geometry_msgs
+  tf2_ros
+  tf2_geometry_msgs
+)
 
+# Install executables
 install(TARGETS
+  aruco_table_calibration_node
   tf_broadcaster_node
-  table_calibrator_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
+# Install config and launch files
+install(DIRECTORY
+  config
+  launch
+  DESTINATION share/${PROJECT_NAME}
+)
 
 ament_package()

@@ -1,5 +1,0 @@
-source;share/ttt_calibration/local_setup.bash
-source;share/ttt_calibration/local_setup.dsv
-source;share/ttt_calibration/local_setup.ps1
-source;share/ttt_calibration/local_setup.sh
-source;share/ttt_calibration/local_setup.zsh

@@ -15,8 +15,10 @@
   <depend>tf2_ros</depend>
   <depend>tf2_geometry_msgs</depend>
   <depend>cv_bridge</depend>
+  <depend>yaml-cpp</depend>
   <depend>image_transport</depend>
   <depend>opencv</depend>
+
 
   <export>
     <build_type>ament_cmake</build_type>

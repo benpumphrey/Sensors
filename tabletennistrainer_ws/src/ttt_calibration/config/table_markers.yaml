@@ -1,0 +1,40 @@
+/**:
+  ros__parameters:
+    # Standard table tennis table dimensions (meters)
+    table:
+      width: 1.525   # 1.525m (5 feet)
+      length: 2.74   # 2.74m (9 feet)
+      height: 0.76   # 0.76m (30 inches)
+    
+    # ArUco marker configuration
+    markers:
+      dictionary_id: 10  # DICT_6X6_250
+      marker_size: 0.10  # 10cm markers
+      
+      # Marker positions on table (in table coordinate frame)
+      # Origin is at table center, net at y=0
+      positions:
+        0:  # Front-left corner (your side, left)
+          x: -0.7625  # Half width left
+          y: -1.37    # Half length toward you
+          z: 0.0      # On table surface
+        
+        1:  # Front-right corner (your side, right)
+          x: 0.7625   # Half width right
+          y: -1.37    # Half length toward you
+          z: 0.0
+        
+        2:  # Back-right corner (opponent side, right)
+          x: 0.7625
+          y: 1.37     # Half length away
+          z: 0.0
+        
+        3:  # Back-left corner (opponent side, left)
+          x: -0.7625
+          y: 1.37
+          z: 0.0
+        
+        4:  # Center of net (optional, for verification)
+          x: 0.0
+          y: 0.0
+          z: 0.1525   # Net height (15.25cm)

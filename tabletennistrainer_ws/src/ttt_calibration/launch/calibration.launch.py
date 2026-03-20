@@ -7,16 +7,7 @@ def generate_launch_description():
     config_dir = get_package_share_directory('ttt_calibration')
     
     return LaunchDescription([
-        # --- DISABLED AUTO-CALIBRATION ---
-        # Node(
-        #     package='ttt_calibration',
-        #     executable='table_calibrator_node',
-        #     name='table_calibrator',
-        #     output='screen'
-        # ),
-
-        # --- RESTORED MANUAL CALIBRATION ---
-        # This publishes your hardcoded coordinates from stereo_extrinsic.yaml
+        # TF Broadcaster - publishes camera and robot transforms
         Node(
             package='ttt_calibration',
             executable='tf_broadcaster_node',

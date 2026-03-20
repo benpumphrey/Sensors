@@ -1,22 +1,22 @@
 /**:
   ros__parameters:
-    camera_baseline: 1.5
+    camera_baseline: 1.5  # Your actual baseline
 
     left_camera:
-      x: -0.75
-      y: 0.0
-      z: 1.0
-      roll: 0.0
-      pitch: -0.785
-      yaw: 0.0
+      x: -0.75      # UPDATE after ArUco calibration
+      y: 0.0        # UPDATE after ArUco calibration
+      z: 1.0        # UPDATE after ArUco calibration
+      roll: 0.0     # UPDATE after ArUco calibration
+      pitch: -0.785 # UPDATE after ArUco calibration (45° = -0.785 rad)
+      yaw: 0.0      # UPDATE after ArUco calibration
 
     right_camera:
-      x: 0.75
-      y: 0.0
-      z: 1.0
-      roll: 0.0
-      pitch: -0.785
-      yaw: 0.0
+      x: 0.75       # UPDATE after ArUco calibration
+      y: 0.0        # UPDATE after ArUco calibration
+      z: 1.0        # UPDATE after ArUco calibration
+      roll: 0.0     # UPDATE after ArUco calibration
+      pitch: -0.785 # UPDATE after ArUco calibration
+      yaw: 0.0      # UPDATE after ArUco calibration
 
     robot_base:
       x: 0.0
