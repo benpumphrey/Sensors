@@ -71,13 +71,17 @@ class SystemLauncher(QThread):
 
     def stop(self):
         self.status_signal.emit("Shutting down nodes...")
+        # Kill local process groups (launch files + all children)
         for p in self.processes:
             try:
                 os.killpg(os.getpgid(p.pid), signal.SIGTERM)
             except:
                 pass
-        
-        subprocess.run(["ssh", f"{JETSON_A_USER}@{JETSON_A_IP}", "pkill -f ttt_bringup"])
+        # Kill any remaining local ROS2 processes
+        subprocess.run("pkill -f 'ros2 launch' ; pkill -f 'ros2 run' ; pkill -f ttt_", shell=True)
+        # Kill all ROS2 processes on nano1
+        subprocess.run(["ssh", f"{JETSON_A_USER}@{JETSON_A_IP}",
+                        "pkill -f 'ros2 launch' ; pkill -f 'ros2 run' ; pkill -f ttt_"])
         self.status_signal.emit("System Offline.")
 
 
@@ -629,7 +633,18 @@ class MartyDashboard(QWidget):
             event.ignore()
 
 
+def _emergency_cleanup():
+    """Called on Ctrl+C or SIGTERM to ensure nodes are killed."""
+    subprocess.run("pkill -f 'ros2 launch' ; pkill -f 'ros2 run' ; pkill -f ttt_", shell=True)
+    subprocess.run(["ssh", f"{JETSON_A_USER}@{JETSON_A_IP}",
+                    "pkill -f 'ros2 launch' ; pkill -f 'ros2 run' ; pkill -f ttt_"])
+
+
 if __name__ == "__main__":
+    import atexit
+    atexit.register(_emergency_cleanup)
+    signal.signal(signal.SIGTERM, lambda *_: (_emergency_cleanup(), sys.exit(0)))
+
     app = QApplication(sys.argv)
     window = MartyDashboard()
     window.show()
