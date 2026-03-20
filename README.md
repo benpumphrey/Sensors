@@ -1,643 +1,694 @@
 # TABLE TENNIS TRAINER
 ## Spring 2026 Capstone Project
 
-A high-speed, vision-guided robotic system designed to autonomously engage in a Table Tennis match with a human opponent. This project utilizes a distributed ROS2 architecture across two NVIDIA Jetson Nanos to handle GPU-accelerated vision processing, interfaced via Ethernet communication to an STM32 microcontroller which will command the joint positions on the arm.
+A high-speed, vision-guided robotic system designed to autonomously engage in a Table Tennis match with a human opponent. This project utilizes a distributed ROS2 architecture across two NVIDIA Jetson Orin Nanos with GPU-accelerated vision processing, interfaced via Ethernet to an STM32 microcontroller for real-time motor control.
 
 ## Contributors
 
 ### Sensors Team
-
-Liam Dabelstein
-
-Jake VanEssendelft
-
-Lucian Bracy
-
-John Duplain
+- Liam Dabelstein
+- Jake VanEssendelft
+- Lucian Bracy
+- John Duplain
 
 ### Mechanical Team
-
-Nathaniel LeBlanc
-
-Ben Pumphrey
-
-Grant Monroe
-
-Zane Peeler
-
-Tae Lee
-
-Theodore Williamson
-
-## System Architecture & Hardware Integration
-
-The project utilizes a distributed hardware stack to minimize processing latency. High-level perception is handled by NVIDIA Jetsons, while low-level motor execution is managed by an STM32 microcontroller.
-
-### **Hardware Components**
-* **Compute:** 2x NVIDIA Jetson Nano (Developer Kit).
-* **Vision:** 2x Arducam OV9281 (Global Shutter, MIPI CSI-2).
-* **Microcontroller:** STM32 (connected via Ethernet).
-* **Actuation:** add section here @mech team.
-* **Networking:** Gigabit Ethernet Switch.
-
-
-### **Hardware Mapping**
-| Component | Connection | Purpose |
-| :--- | :--- | :--- |
-| **Arducams** | MIPI CSI-2 | 240 FPS Global Shutter image capture at 640x400 resolution. |
-| **Jetson A ↔ B** | Ethernet (Static IP) | Sharing 2D ball coordinates for stereo fusion. |
-| **Jetson A ↔ STM32** | Ethernet (UDP) | Sending joint angles to the arm at high frequency. |
-| **STM32 ↔ Motors** | PWM / Step-Dir | Direct electrical control of the arm. |
+- Nathaniel LeBlanc
+- Ben Pumphrey
+- Grant Monroe
+- Zane Peeler
+- Tae Lee
+- Theodore Williamson
 
 ---
 
-### ROS 2 Package Glossary
+## System Architecture & Hardware Integration
 
-Each package in the `src/` directory is designed with **Modularity** in mind and serves a specific purpose in the system.
+The project utilizes a distributed hardware stack to minimize processing latency. High-level perception is handled by NVIDIA Jetson Orin Nanos with GPU acceleration, while low-level motor execution is managed by an STM32 microcontroller.
 
-### **1. ttt_msgs**
-* **Type:** Interface Package.
-* **Function:** Defines the custom "language" of the robot. It contains the `.msg` files for ball detection, tracking, and arm status.
+### Hardware Components
+* **Compute:** 2x NVIDIA Jetson Orin Nano Super (8GB RAM, 1024-core CUDA GPU)
+* **Vision:** 2x Arducam OV9281 (1MP Global Shutter, Monochrome, MIPI CSI-2)
+* **Microcontroller:** STM32 (connected via Ethernet UDP)
+* **Actuation:** [Add mechanical details here @mech team]
+* **Networking:** Gigabit Ethernet Switch
 
-### **2. ttt_camera**
-* **Type:** Hardware Driver.
-* **Function:** Interfaces with the MIPI CSI-2 ports on the Jetson. It uses a hardware-accelerated GStreamer pipeline to provide raw grayscale frames.
-* **Output:** `sensor_msgs/Image` (240 FPS).
+### Camera Specifications
+| Specification | Value |
+| :--- | :--- |
+| **Sensor** | OV9281 (1MP Global Shutter) |
+| **Resolution** | 640×400 pixels |
+| **Frame Rate** | 240 FPS |
+| **Interface** | MIPI CSI-2 (4-lane) |
+| **Format** | Monochrome (GREY/Y10/Y16) |
+| **Shutter** | Global (no rolling shutter artifacts) |
 
-### **3. ttt_vision**
-* **Type:** Perception Engine.
-* **Function:** The "eyes and brain" of the system. It handles:
-    * **Detection:** Finding the ball in 2D pixels (using GPU/VPI).
-    * **Stereo Fusion:** Triangulating two 2D points into a 3D (X, Y, Z) coordinate.
-    * **Prediction:** Estimating where the ball will be using a Kalman Filter.
+### Hardware Mapping
+| Component | Connection | Purpose |
+| :--- | :--- | :--- |
+| **Arducam OV9281** | MIPI CSI-2 (CAM1 port) | 240 FPS global shutter capture at 640×400 |
+| **Jetson A ↔ B** | Ethernet (Gigabit, Static IPs) | ROS2 DDS for sharing 2D ball detections |
+| **Jetson A ↔ STM32** | Ethernet (UDP, 192.168.1.100) | Sending joint angles at high frequency |
+| **STM32 ↔ Motors** | PWM / Step-Dir | Direct motor control |
 
-### **4. ttt_control**
-* **Type:** Decision Maker.
-* **Function:** Performs **Inverse Kinematics (IK)**. It takes the predicted ball destination and calculates the exact joint angles required for the paddle to hit the ball.
+### Network Configuration
+- **Jetson A IP:** `192.168.1.10`
+- **Jetson B IP:** `192.168.1.20`
+- **STM32 IP:** `192.168.1.100`
+- **ROS_DOMAIN_ID:** `42`
 
-### **5. ttt_hardware**
-* **Type:** Communication Bridge.
-* **Function:** The "translator." It takes ROS 2 joint commands and packs them into a binary UDP format that the **STM32** can understand with minimal overhead.
+---
 
-### **6. ttt_calibration**
-* **Type:** Configuration.
-* **Function:** Stores the physical offsets of the cameras (e.g., the 45° tilt). It publishes the **TF2 (Transform)** tree so the vision system knows where the table is relative to the cameras.
+## ROS 2 Package Glossary
 
-### **7. ttt_bringup**
-* **Type:** System Orchestrator.
-* **Function:** Contains Python launch scripts. Allows for start of the entire system with a single command.
+Each package in the `src/` directory is designed with **modularity** in mind.
+
+### 1. ttt_msgs
+* **Type:** Interface Package
+* **Function:** Custom message definitions
+* **Messages:**
+  - `BallDetection.msg` - 2D ball position (x, y, radius, confidence)
+  - `BallTrack.msg` - 3D tracked ball (position, velocity, tracked status)
+
+### 2. ttt_camera
+* **Type:** Hardware Driver
+* **Function:** V4L2 interface to Arducam OV9281 via MIPI CSI-2
+* **Output:** `sensor_msgs/Image` (MONO8, 240 FPS)
+* **Features:** 
+  - Hardware-accelerated capture
+  - Configurable exposure/gain via v4l2-ctl
+  - Optional live preview window
+
+### 3. ttt_vision
+* **Type:** GPU-Accelerated Perception Engine
+* **Function:** Ball detection using CUDA OpenCV
+* **Pipeline:**
+  1. GPU upload (cv::cuda::GpuMat)
+  2. GPU Gaussian blur (cv::cuda::createGaussianFilter)
+  3. GPU Hough circles detection
+  4. CPU brightness filtering (select brightest candidate)
+* **Output:** `ttt_msgs/BallDetection` (x, y, radius, confidence)
+
+### 4. ttt_stereo
+* **Type:** 3D Reconstruction
+* **Function:** Stereo triangulation from dual 2D detections
+* **Algorithm:**
+  - Time-synchronized detection matching (ApproximateTime policy)
+  - Disparity calculation: `disparity = left_x - right_x`
+  - Depth: `Z = (fx × baseline) / disparity`
+  - 3D position: `(X, Y, Z)` in camera frame
+* **Output:** `geometry_msgs/PointStamped` (3D ball position)
+
+### 5. ttt_trajectory
+* **Type:** Predictive Tracking
+* **Function:** Physics-based trajectory prediction with bounce handling
+* **Features:**
+  - Rolling buffer of 3D samples
+  - Linear fit for X, Z motion
+  - Parabolic fit for Y (gravity-affected)
+  - Bounce physics (table collision with restitution coefficient)
+  - Landing point prediction
+* **Output:** 
+  - `/ball_trajectory/predicted` - Future position
+  - `/ball_trajectory/landing` - Table landing point
+
+### 6. ttt_control
+* **Type:** Motion Planning
+* **Function:** Inverse kinematics (IK) solver
+* **Status:** *To be implemented*
+
+### 7. ttt_hardware
+* **Type:** Hardware Bridge
+* **Function:** UDP communication to STM32
+* **Protocol:** Binary packed joint angles
+* **Target:** `192.168.1.100:5000`
+* **Status:** *To be implemented*
+
+### 8. ttt_calibration
+* **Type:** Spatial Configuration
+* **Function:** Camera pose estimation and TF2 transforms
+* **Methods:**
+  - Manual measurement (tape measure + level app)
+  - **ArUco marker-based automatic calibration** (recommended)
+* **Output:** TF2 transforms (table → camera_left/right → robot_base)
+
+### 9. ttt_bringup
+* **Type:** System Orchestrator
+* **Function:** Launch scripts for coordinated startup
+* **Launch Files:**
+  - `jetsonA.launch.py` - Left camera + vision + stereo + trajectory
+  - `jetsonB.launch.py` - Right camera + vision
+  - `calibrate_table_launch.py` - ArUco calibration mode
+  - `camera_left/right.launch.py` - Individual camera testing
+
+---
 
 ## System Topology
 
-### Jetson A (`insert IP address here`)
-- **Nodes:** `camera_left`, `ball_detector_left`, `stereo_fusion`, `predictor`, `ik_solver`, `stm32_bridge`.
-- **Hardware:** Left Arducam, Ethernet to STM32, Ethernet to Slave Jetson.
+### Jetson A (`192.168.1.10`)
+**Nodes:** 
+- `camera_left` - OV9281 capture (240 FPS)
+- `vision_node` (left) - GPU ball detection
+- `stereo_node` - 3D triangulation
+- `trajectory_node` - Physics prediction
+- `tf_broadcaster` - Coordinate transforms
 
-### Jetson B (`insert IP address here`)
-- **Nodes:** `camera_right`, `ball_detector_right`.
-- **Hardware:** Right Arducam.
+**Hardware:** 
+- Left Arducam OV9281 (MIPI CSI-2)
+- Ethernet to Jetson B (ROS2 DDS)
+- Ethernet to STM32 (UDP)
 
-#### Package Structure
+### Jetson B (`192.168.1.20`)
+**Nodes:**
+- `camera_right` - OV9281 capture (240 FPS)
+- `vision_node` (right) - GPU ball detection
+- `tf_broadcaster` - Coordinate transforms
 
-All packages in this workspace follow the standard ROS 2 C++ layout.
+**Hardware:**
+- Right Arducam OV9281 (MIPI CSI-2)
+- Ethernet to Jetson A (ROS2 DDS)
 
-Using `ttt_vision` as an example:
-```text
-ttt_vision/
-├── CMakeLists.txt          # Build instructions
-├── package.xml             # Metadata and dependencies
-├── include/
-│   └── ttt_vision/         # Header files
-│       └── ball_math.hpp   # Declarations and shared logic
-├── src/
-│   └── vision_node.cpp   # Node implementation
-└── msg/                    # (Only in ttt_msgs) Custom data types
-
+### Data Flow
+```
+Camera Feed (240 FPS)
+    ↓
+GPU Detection (~2-5ms)
+    ↓
+2D Ball Position (left + right)
+    ↓
+Stereo Triangulation
+    ↓
+3D Ball Position
+    ↓
+Trajectory Prediction
+    ↓
+Landing Point Estimation
+    ↓
+Inverse Kinematics
+    ↓
+STM32 Joint Commands
 ```
 
-### How to Edit and Add Features
-#### **1. Editing Headers (.hpp)**
-* **Location:** Always place headers in `include/<package_name>/`.
-* If you add a new header, ensure ament_export_include_directories(include) is in CMakeLists.txt so other packages can see it.
+---
 
-#### **2. Adding a New Node (.cpp)**
-* **Location:** Place the implementation file in the `src/` directory.
-* **Registration:** You must register the new node in the `CMakeLists.txt` file so the compiler knows to build it. Add the following lines:
+## M.A.R.T.Y. Control Center (GUI)
 
+A PyQt5-based dashboard (`marty_gui.py`) provides:
+
+### Features
+- **Dual camera feeds** - Live video from both Jetsons with synchronized display
+- **3D ball position display** - Real-time X, Y, Z coordinates
+- **Built-in ArUco calibration mode** - Visual marker detection overlay
+- **One-click calibration** - Automatic camera pose estimation and config update
+- **System orchestration** - SSH-based launch of both Jetsons
+- **Status monitoring** - Real-time system health display
+
+### Calibration Mode
+1. Click **"Calibration Mode"** button
+2. Position ArUco markers (IDs 0-3) at table corners
+3. Markers detected and labeled in real-time
+4. Click **"Save Calibration"** when 3+ markers visible
+5. System automatically:
+   - Runs calibration on both Jetsons
+   - Parses results
+   - Updates `stereo_extrinsic.yaml`
+   - Rebuilds calibration package
+6. Restart M.A.R.T.Y. to apply changes
+
+### Usage
+```bash
+cd ~/TTT-Capstone-Sensors/tabletennistrainer_ws
+source install/setup.bash
+python3 src/ttt_bringup/scripts/marty_gui.py
+```
+
+---
+
+## Camera Calibration Guide
+
+### Overview
+Two cameras mounted at **45° downward angles** above opposite table sides enable stereo vision while minimizing occlusion.
+
+### Calibration Types
+
+#### 1. Intrinsic Calibration (Camera Properties)
+- **What:** Focal length, principal point, lens distortion
+- **Method:** Default values provided (500px focal length for OV9281 @ 640×400)
+- **When to calibrate:** When sub-centimeter accuracy needed
+
+**Default intrinsics:**
+```yaml
+camera_matrix:
+  data: [500.0, 0.0, 320.0,
+         0.0, 500.0, 200.0,
+         0.0, 0.0, 1.0]
+distortion_coefficients:
+  data: [0.0, 0.0, 0.0, 0.0, 0.0]
+```
+
+#### 2. Extrinsic Calibration (Camera Position)
+
+##### A. ArUco Marker Calibration (Recommended)
+
+**Advantages:**
+- ✅ Automatic - no manual measurements
+- ✅ Accurate to ±1-2mm
+- ✅ Fast - calibrates both cameras in <30 seconds
+- ✅ Repeatable - easy to recalibrate if cameras move
+- ✅ Integrated into GUI
+
+**Requirements:**
+- 4× ArUco markers (DICT_6X6_250, IDs 0-3)
+- Printed at 10cm × 10cm each
+- Placed at table corners
+
+**Print Markers:**
+1. Visit: https://chev.me/arucogen/
+2. Settings:
+   - Dictionary: **6x6 (250 markers)**
+   - Marker ID: **0, 1, 2, 3** (generate separately)
+   - Marker size: **100mm**
+3. Print at **100% scale** (no scaling!)
+4. Verify: Measure with ruler (should be exactly 10cm × 10cm)
+5. Mount on cardboard for rigidity
+
+**Marker Placement:**
+```
+                                    Table (Top View)
+                              ┌─────────────────────────┐
+                              │    [0]         [2]      │ 
+        Front (your side) ->  │                         │ <- Back (opponent)
+                              │                         │
+                              │    [1]         [3]      │  
+                              └─────────────────────────┘
+
+ID 0: Front-left corner
+ID 1: Front-right corner
+ID 2: Back-right corner
+ID 3: Back-left corner
+```
+
+**Calibration Steps:**
+
+**Method 1: Using GUI (Easiest)**
+```bash
+# Launch M.A.R.T.Y. dashboard
+python3 src/ttt_bringup/scripts/marty_gui.py
+
+# Steps:
+# 1. Click "Calibration Mode"
+# 2. Position markers at table corners
+# 3. Wait for 3+ markers detected in each camera
+# 4. Click "Save Calibration"
+# 5. Restart GUI
+```
+
+**Method 2: Manual Launch**
+```bash
+# Launch calibration on each Jetson
+# Jetson A (left camera):
+ros2 launch ttt_bringup calibrate_table_launch.py
+
+# Jetson B (right camera):
+ros2 launch ttt_bringup calibrate_table_launch.py camera_id:=right
+
+# Press 'c' to calibrate, 's' to save
+# Results saved to /tmp/camera_left_calibration.yaml
+```
+
+##### B. Manual Measurement (Quick but Less Accurate)
+
+**Tools:** Tape measure, phone level app
+
+**Steps:**
+1. Measure camera positions from table center
+2. Use level app to verify 45° angle
+3. Update `stereo_extrinsic.yaml` manually
+
+---
+
+### Calibration File Structure
+```
+ttt_calibration/
+├── config/
+│   ├── camera_left_intrinsic.yaml     # Left camera lens parameters
+│   ├── camera_right_intrinsic.yaml    # Right camera lens parameters
+│   ├── stereo_extrinsic.yaml          # Camera poses (auto-updated by ArUco)
+│   └── table_markers.yaml             # ArUco marker positions
+├── launch/
+│   ├── calibration.launch.py          # TF broadcaster
+│   └── calibrate_table_launch.py      # ArUco calibration mode
+└── src/
+    ├── tf_broadcaster_node.cpp        # Publishes TF transforms
+    └── aruco_calibrate_camera.cpp     # ArUco-based pose estimation
+```
+
+### Example Calibrated Values
+
+After ArUco calibration, `stereo_extrinsic.yaml` will contain:
+```yaml
+/**:
+  ros__parameters:
+    camera_baseline: 1.524  # Auto-calibrated distance between cameras
+
+    left_camera:
+      x: -0.762      # 76.2cm left of table center
+      y: 0.143       # 14.3cm toward opponent
+      z: 0.987       # 98.7cm above table
+      roll: 0.012    # 0.7° roll
+      pitch: -0.798  # 45.7° downward
+      yaw: -0.023    # 1.3° yaw correction
+
+    right_camera:
+      x: 0.762       # 76.2cm right of table center
+      y: 0.138       # Similar forward position
+      z: 0.991       # Similar height
+      roll: -0.008
+      pitch: -0.792
+      yaw: 0.018
+```
+
+### Verification
+```bash
+# Launch TF broadcaster
+ros2 launch ttt_calibration calibration.launch.py
+
+# Verify transforms
+ros2 run tf2_tools view_frames  # Generates frames.pdf
+ros2 run tf2_ros tf2_echo table camera_left_optical_frame
+
+# Expected output:
+# Translation: [-0.762, 0.143, 0.987]
+# Rotation (RPY): [0.012, -0.798, -0.023]
+#         (degrees): [0.7°, -45.7°, -1.3°]
+```
+
+---
+
+## Building the Project
+
+### Standard Build
+```bash
+cd ~/TTT-Capstone-Sensors/tabletennistrainer_ws
+./build.sh
+source install/setup.bash
+```
+
+### Build Script Contents
+```bash
+#!/bin/bash
+if [ "$1" == "clean" ]; then
+    rm -rf build install log
+fi
+colcon build --symlink-install
+```
+
+### Memory-Constrained Build
+If Jetson freezes during build (RAM exhaustion):
+```bash
+colcon build --symlink-install --parallel-workers 1
+```
+
+### Build Single Package
+```bash
+colcon build --packages-select ttt_vision
+source install/setup.bash
+```
+
+---
+
+## Running the System
+
+### Full System Launch
+
+**On Jetson A:**
+```bash
+cd ~/TTT-Capstone-Sensors/tabletennistrainer_ws
+source install/setup.bash
+ros2 launch ttt_bringup jetsonA.launch.py
+```
+
+**On Jetson B:**
+```bash
+cd ~/TTT-Capstone-Sensors/tabletennistrainer_ws
+source install/setup.bash
+ros2 launch ttt_bringup jetsonB.launch.py
+```
+
+**Or use GUI (launches both automatically):**
+```bash
+python3 src/ttt_bringup/scripts/marty_gui.py
+```
+
+### Testing Individual Components
+
+**Camera only:**
+```bash
+ros2 launch ttt_bringup camera_left.launch.py
+ros2 topic hz /camera/left/image_raw  # Should show ~240 Hz
+```
+
+**Vision with detection overlay:**
+```bash
+ros2 launch ttt_bringup jetsonA.launch.py
+# Window shows green circles on detected balls
+```
+
+**Monitor 3D positions:**
+```bash
+ros2 topic echo /ball_position_3d
+# Output: x, y, z in meters relative to table
+```
+
+**Monitor trajectory predictions:**
+```bash
+ros2 topic echo /ball_trajectory/landing
+# Shows predicted table landing point
+```
+
+---
+
+## Camera Tuning
+
+### V4L2 Controls
+```bash
+# List available controls
+v4l2-ctl -d /dev/video0 --list-ctrls
+
+# Set exposure and gain for bright ball tracking
+v4l2-ctl -d /dev/video0 -c exposure=800 -c analogue_gain=1200
+
+# Auto-exposure off (manual control)
+v4l2-ctl -d /dev/video0 -c auto_exposure=1
+```
+
+### Optimal Settings (for white ping pong ball)
+```bash
+v4l2-ctl -d /dev/video0 \
+  -c exposure=800 \
+  -c analogue_gain=1200 \
+  -c auto_exposure=1
+```
+
+These settings are automatically applied by `marty_gui.py` on startup.
+
+---
+
+## Troubleshooting
+
+### Camera Not Detected
+```bash
+# Check camera connection
+ls /dev/video*  # Should show /dev/video0
+
+# Check formats
+v4l2-ctl -d /dev/video0 --list-formats-ext
+
+# Verify MIPI connection
+dmesg | grep ov9281
+```
+
+### Network Issues (Jetsons Can't See Each Other)
+```bash
+# Check ROS_DOMAIN_ID matches on both
+echo $ROS_DOMAIN_ID  # Should be 42
+
+# Test connectivity
+ping 192.168.1.10  # From Jetson B to A
+ping 192.168.1.20  # From Jetson A to B
+
+# Check topics visible
+ros2 topic list | grep ball_detection
+# Should see /ball_detection/left and /ball_detection/right
+```
+
+### GPU Not Working
+```bash
+# Verify CUDA OpenCV installation
+python3 -c "import cv2; print(cv2.cuda.getCudaEnabledDeviceCount())"
+# Should output: 1
+
+# Check GPU usage during vision
+tegrastats  # Monitor GPU utilization
+
+# Rebuild OpenCV with CUDA if needed
+~/OpenCV-4-10-0.sh
+```
+
+### Calibration Not Saving
+```bash
+# Check file permissions
+ls -l /tmp/camera_*_calibration.yaml
+
+# Verify ArUco detection
+ros2 topic echo /camera/left/image_raw  # Camera running?
+ros2 run ttt_calibration aruco_calibrate_camera  # Manual test
+```
+
+---
+
+## Performance Metrics
+
+| Component | Latency | Notes |
+|-----------|---------|-------|
+| Camera capture | 4.2ms | 240 FPS = 4.17ms period |
+| GPU ball detection | 2-5ms | CUDA-accelerated pipeline |
+| Stereo triangulation | <1ms | Simple math |
+| Trajectory prediction | <1ms | 5-20 sample buffer |
+| **Total perception** | **~10ms** | Camera → 3D prediction |
+
+### Bandwidth
+- **Image data:** 640×400×1 byte × 240 FPS = **60 MB/s per camera**
+- **ROS2 detections:** ~100 bytes × 240 Hz = **24 KB/s per camera**
+- **3D positions:** ~50 bytes × 240 Hz = **12 KB/s**
+
+---
+
+## Package Structure Example
+
+Using `ttt_vision` as reference:
+```text
+ttt_vision/
+├── CMakeLists.txt          # Build configuration
+├── package.xml             # Dependencies and metadata
+├── include/
+│   └── ttt_vision/         # Public headers (if needed)
+├── src/
+│   └── vision_node.cpp     # GPU-accelerated ball detector
+└── launch/                 # Launch file (optional)
+```
+
+### Adding a New Node
+
+1. **Create source file:**
+```bash
+nano src/ttt_vision/src/my_node.cpp
+```
+
+2. **Register in CMakeLists.txt:**
 ```cmake
 add_executable(my_node src/my_node.cpp)
-ament_target_dependencies(my_node rclcpp ttt_msgs)
+ament_target_dependencies(my_node
+  rclcpp
+  ttt_msgs
+  OpenCV
+)
+target_link_libraries(my_node ${OpenCV_LIBS})
 
-# This part ensures the executable is installed to the lib folder
-install(TARGETS
-  my_node
+install(TARGETS my_node
   DESTINATION lib/${PROJECT_NAME}
 )
 ```
 
-#### 3. **Building and Running a Single Package**
-* **Build:** `colcon build --symlink-install --packages-select <package_name>`
-* **Source:** `source install/setup.bash`
-* **Run:** `ros2 run <package_name> <executable_name>`
-
-
-# Camera Calibration Guide
-
-## Overview
-
-The Table Tennis Trainer uses a **stereo vision system** with two cameras mounted at **45° angles** above opposite sides of the table. This configuration maximizes field of view while minimizing occlusion from the robot arm and player.
-
-## Why this Matters
-
-Without calibration, the system cannot:
-- Correct for lens distortion (curves appear in straight lines)
-- Accurately measure distances in 3D space
-- Transform pixel coordinates to real-world positions
-- Perform stereo triangulation for depth estimation
-
-With proper calibration:
-- Straight lines appear straight (lens distortion corrected)
-- Pixel coordinates accurately map to millimeter positions
-- Stereo fusion produces accurate 3D ball positions
-- Robot arm can intercept the ball precisely
-
----
-
-## Camera Mounting Configuration
-
-### Physical Setup
-
-```
-                Table (Top View)
-    ┌───────────────────────────────────────┐
-    │                                       │
-    │            Opponent's Side            │
-    │                                       │
-    ├───────────────────────────────────────┤
-    ├───────────────────────────────────────┤
-    │                                       │
-    │              Robot's Side             │
-    │                                       │
-    └───────────────────────────────────────┘
-
-Camera A (Left)              Camera B (Right)
-     ↓                              ↓
-    [ ]                            [ ]
-     ╲ 45°                    45° ╱
-      ╲                          ╱
-       ╲                        ╱
-        ╲                      ╱
-         ╲____________________╱
-              Table Surface
-```
-
-### Side View (45° Angle)
-
-```
-        Camera
-          [ ]
-           │╲
-           │ ╲ 45°
-    Height │  ╲
-    (~1m)  │   ╲
-           │    ╲
-           │     ╲
-    ═══════════════════  ← Table Surface
-```
-
-**Key Measurements:**
-- **Height:** ~1 meter above table surface
-- **Angle:** 45° downward tilt (pitch = -0.785 radians)
-- **Baseline:** Distance between cameras (~1.5 meters)
-- **Position:** Cameras above left/right table edges
-
----
-## Two Types of Calibration
-
-### 1. Intrinsic Calibration (Camera Properties)
-
-Real lenses introduce distortion. Straight lines in the world appear curved in the image. Intrinsic calibration provides the math to "un-distort" the image.
-
-**What it measures:**
-- Focal length (fx, fy) - how the lens "zooms"
-- Principal point (cx, cy) - optical center of the image
-- Distortion coefficients (k1, k2, k3, p1, p2) - lens curvature effects
-
-**Camera Matrix:**
-```
-K = [ fx   0   cx ]
-    [  0  fy   cy ]
-    [  0   0    1 ]
-```
-
-- `fx, fy`: Focal length in pixels (how many pixels per degree of field of view)
-- `cx, cy`: Image center point (usually close to width/2, height/2)
-
-**Example for OV9281 @ 640x400p resolution:**
-```yaml
-camera_matrix:
-  data: [458.123, 0.0, 320.456,    # fx, 0, cx
-         0.0, 457.891, 201.234,     # 0, fy, cy
-         0.0, 0.0, 1.0]             # 0, 0, 1
-```
----
-
-### 2. Extrinsic Calibration (Camera Position & Orientation)
-
-This is used to transform pixel coordinates from the camera's tilted frame to the table's horizontal frame. The 45° angle means pixels don't directly map to table positions.
-
-**What it measures:**
-- Translation (x, y, z) - camera position in 3D space
-- Rotation (roll, pitch, yaw) - camera orientation
-
-
-**Coordinate Frames:**
-
-```
-World Frame (origin)
-  └─ Table Frame (table surface, flat)
-      ├─ Camera Left Frame (45° tilted)
-      ├─ Camera Right Frame (45° tilted)
-      └─ Robot Base Frame (arm mounting point)
-```
-
-**Transform Chain:**
-```
-Pixel (u, v) 
-  → Camera Frame (x_cam, y_cam, z_cam) [using intrinsics]
-  → Table Frame (x_table, y_table, z_table) [using extrinsics]
-  → Robot Frame (x_robot, y_robot, z_robot) [for arm control]
-```
-
-**Example Extrinsic Parameters:**
-```yaml
-# Left camera - 45° angle, left side of table
-left_camera:
-  x: -0.75       # 75cm left of table center  # EDIT HERE WITH ACTUAL VALUE
-  y: 0.0         # Aligned with table center lengthwise
-  z: 1.0         # 1 meter above table surface # EDIT HERE WITH ACTUAL VALUE
-  roll: 0.0      # No rotation around x-axis (radians)
-  pitch: -0.785  # 45° down = -45 * π/180 = -0.785 rad
-  yaw: 0.0       # Facing straight ahead
-```
-
----
-
-## How the 45° Angle Affects Vision
-
-### Field of View Coverage
-
-**Mathematical Transform:**
-
-```
-                 Camera Frame (tilted 45°)
-                        ↑ Z_cam
-                        │
-                        │  45°
-                        │╱
-    Table Frame  ───────┼────────→ Y_cam
-    (horizontal)        │
-         ↑             ╱│
-         │Z          ╱  
-         │         ╱   
-         │       ╱    
-         └──────→ Y
-
-Rotation Matrix (45° pitch):
-R = [ 1      0         0      ]
-    [ 0   cos(45°) -sin(45°) ]
-    [ 0   sin(45°)  cos(45°) ]
-
-R = [ 1    0       0     ]
-    [ 0   0.707  -0.707  ]
-    [ 0   0.707   0.707  ]
-```
-
----
-
-## Calibration Process
-
-### Quick Start: Using Default Values
-
-**For rapid prototyping and initial testing**, you can skip intrinsic calibration and use estimated default values:
-
-**Steps:**
-
-1. **Use pre-configured defaults:**
-
-The `ttt_calibration` package comes with reasonable default values for the OV9281 camera:
-
-```yaml
-# config/camera_left_intrinsic.yaml (defaults)
-image_width: 640
-image_height: 400
-
-camera_matrix:
-  rows: 3
-  cols: 3
-  data: [500.0, 0.0, 320.0,    # fx ≈ 500 (typical for OV9281)
-         0.0, 500.0, 200.0,     # fy ≈ 500, cx = width/2, cy = height/2
-         0.0, 0.0, 1.0]
-
-distortion_coefficients:
-  rows: 1
-  cols: 5
-  data: [0.0, 0.0, 0.0, 0.0, 0.0]  # Assume minimal distortion
-
-camera_name: "ov9281_left"
-
-```
-2. **Manually measure camera positions:**
-
-Use a tape measure and level app to measure:
-
+3. **Build and run:**
 ```bash
-# EDIT WITH ACTUAL VALUES
-# Measure from table center to each camera
-# Left camera: 75cm left, 100cm high, 45° down
-# Right camera: 75cm right, 100cm high, 45° down
-
-nano ~/TTT-Capstone-Sensors/tabletennistrainer_ws/src/ttt_calibration/config/stereo_extrinsic.yaml
-```
-
-3. **Update with your measurements:**
-
-```yaml
-left_camera:
-  # EDIT WITH ACTUAL VALUES
-  x: -0.75      # YOUR MEASUREMENT: distance left of center (meters)
-  y: 0.0        # YOUR MEASUREMENT: forward/back position
-  z: 1.0        # YOUR MEASUREMENT: height above table
-  roll: 0.0
-  pitch: -0.785 # 45° = -0.785 radians (use phone level app to verify)
-  yaw: 0.0
-
-right_camera:
-  x: 0.75       # YOUR MEASUREMENT: distance right of center
-  y: 0.0
-  z: 1.0
-  roll: 0.0
-  pitch: -0.785
-  yaw: 0.0
-```
-
-4. **Launch and test:**
-
-```bash
-# Launch TF broadcaster with your measurements
-ros2 launch ttt_calibration calibration.launch.py
-
-# Test the system
-ros2 launch ttt_bringup full_system.launch.py
-```
-
-**Expected Accuracy with Defaults:**
-- Position accuracy: ±2-5 cm
-- Good enough for: trajectory testing, algorithm development, initial demos
-- Not good enough for: competition-grade accuracy, precision hitting
-
-**When to do full calibration:**
-- When you need more accuracy
-- Before final competition/demo
-- If ball tracking looks off
-
----
-
----
-
-### Alternative Calibration Methods
-
-If you don't have access to a printed checkerboard, consider these options:
-
-#### Option A: ArUco Marker Board
-- Easier to print and detect than checkerboards
-- More robust to partial occlusion
-- Single-page printout
-
-```bash
-# Install ArUco package
-sudo apt install ros-humble-aruco-opencv
-
-# Generate marker board
-ros2 run aruco_opencv create_board_charuco \
-  --sl 0.04 --ml 0.02 --h 5 --w 7 \
-  --d 10 board.png
-```
-
-#### Option B: Display Pattern on Screen
-- No printing required
-- Use laptop/tablet to display checkerboard
-- Less accurate due to screen reflections
-
-**Resources:**
-- Online patterns: https://markhedleyjones.com/projects/calibration-checkerboard-collection
-- Generate custom: https://calib.io/pages/camera-calibration-pattern-generator
-
-#### Option C: Incremental Calibration
-1. Start with defaults (as shown above)
-2. Test system and identify errors
-3. Calibrate only when accuracy becomes critical
-4. Measure improvement to justify calibration effort
-
----
-
-### Part 1: Full Intrinsic Calibration (Per Camera) - Optional but Recommended
-
-**Equipment needed:**
-- Printed checkerboard pattern (8x6 internal corners, 24mm squares)
-- Flat, rigid surface (cardboard backing)
-
-**Steps:**
-
-1. **Start camera node:**
-```bash
-ros2 run ttt_camera camera_node --ros-args \
-  -p camera_id:=left \
-  -p width:=640 \
-  -p height:=400 \
-  -p fps:=240
-```
-
-2. **Launch calibration tool:**
-```bash
-ros2 run camera_calibration cameracalibrator \
-  --size 8x6 \
-  --square 0.024 \
-  image:=/camera/left/image_raw \
-  camera:=/camera/left
-```
-
-3. **Collect images:**
-Move the checkerboard around to fill coverage bars:
-- **X bar (green):** Move checkerboard left ↔ right
-- **Y bar (green):** Move checkerboard up ↔ down
-- **Size bar (green):** Move closer ↔ farther from camera
-- **Skew bar (green):** Tilt checkerboard at various angles
-
-**Target: 50-100 images with all bars GREEN**
-
-4. **Calibrate and save:**
-- Click **CALIBRATE** (takes 30-60 seconds)
-- Click **SAVE** → saves to `/tmp/calibrationdata.tar.gz`
-
-5. **Extract results:**
-```bash
-cd /tmp
-tar -xzf calibrationdata.tar.gz
-cat ost.yaml
-```
-
-6. **Update config file:**
-Copy the `camera_matrix` and `distortion_coefficients` values to:
-```
-tabletennistrainer_ws/src/ttt_calibration/config/camera_left_intrinsic.yaml
-```
-
-7. **Repeat for right camera**
-
----
-
-### Part 2: Extrinsic Calibration (Camera Positions)
-
-**Two methods:**
-
-#### Method A: Manual Measurement
-
-1. **Measure physical positions:**
-   - Tape measure from table center to each camera
-   - Record: x, y, z positions in meters
-   - Measure mounting angles with protractor or level app
-
-2. **Update config:**
-```bash
-nano src/ttt_calibration/config/stereo_extrinsic.yaml
-```
-
-3. **Enter measured values:**
-```yaml
-left_camera:
-  x: -0.75      # Measured: 75cm left of center
-  y: 0.0        # Measured: aligned with center
-  z: 1.0        # Measured: 100cm above table
-  roll: 0.0     # Measured: no twist
-  pitch: -0.785 # Measured: 45° down
-  yaw: 0.0      # Measured: straight ahead
-```
-
-**Accuracy:** ±2-5cm
-
----
-
-#### Method B: Stereo Checkerboard Calibration
-
-Use ROS2 stereo calibration with checkerboard visible to BOTH cameras simultaneously:
-
-```bash
-# Run both cameras
-ros2 launch ttt_bringup jetsonA.launch.py &
-ros2 launch ttt_bringup jetsonB.launch.py &
-
-# Stereo calibration
-ros2 run camera_calibration cameracalibrator \
-  --approximate 0.1 \
-  --size 8x6 --square 0.024 \
-  right:=/camera/right/image_raw left:=/camera/left/image_raw \
-  right_camera:=/camera/right left_camera:=/camera/left
-```
-
-**Requirements:**
-- Checkerboard must be visible to BOTH cameras at once
-- Collect images from multiple positions
-- More accurate than manual measurement
-
-**Accuracy:** ±1-2mm
-
----
-
-### Part 3: Verification
-
-After calibration, verify the system works:
-
-**1. Launch TF broadcaster:**
-```bash
-ros2 launch ttt_calibration calibration.launch.py
-```
-
-**2. Visualize transforms:**
-```bash
-# View transform tree
-ros2 run tf2_tools view_frames
-
-# Echo specific transform
-ros2 run tf2_ros tf2_echo table camera_left_optical_frame
-```
-
-**3. Test with real ball:**
-- Launch full system
-- Toss ping pong ball across table
-- Verify 3D position looks reasonable
-- Check if positions track smoothly
-
----
-
-
-## Files used for Calibration
-
-```
-ttt_calibration/
-├── config/
-│   ├── camera_left_intrinsic.yaml    # Lens properties (Camera A)
-│   ├── camera_right_intrinsic.yaml   # Lens properties (Camera B)
-│   └── stereo_extrinsic.yaml         # Camera positions & 45° angles
-├── launch/
-│   └── calibration.launch.py         # Launches TF broadcaster
-└── src/
-    └── tf_broadcaster_node.cpp       # Publishes coordinate transforms
+colcon build --packages-select ttt_vision
+source install/setup.bash
+ros2 run ttt_vision my_node
 ```
 
 ---
 
 ## Quick Reference Commands
 
+### System Control
 ```bash
-# List camera controls
-v4l2-ctl -d /dev/video0 --list-ctrls
+# Launch full system (GUI)
+python3 src/ttt_bringup/scripts/marty_gui.py
 
-# Run intrinsic calibration
-ros2 run camera_calibration cameracalibrator \
-  --size 8x6 --square 0.024 \
-  image:=/camera/left/image_raw camera:=/camera/left
+# Launch manually
+ros2 launch ttt_bringup jetsonA.launch.py  # Jetson A
+ros2 launch ttt_bringup jetsonB.launch.py  # Jetson B
 
-# Launch TF transforms
-ros2 launch ttt_calibration calibration.launch.py
+# Stop all nodes
+pkill -f ttt_bringup
+```
 
-# View transform tree
+### Monitoring
+```bash
+# List active nodes
+ros2 node list
+
+# List topics
+ros2 topic list
+
+# Monitor ball detections
+ros2 topic echo /ball_detection/left
+ros2 topic hz /ball_detection/left  # Check rate
+
+# Monitor 3D positions
+ros2 topic echo /ball_position_3d
+
+# View coordinate transforms
 ros2 run tf2_tools view_frames
+```
 
-# Check specific transform
+### Calibration
+```bash
+# ArUco calibration (GUI)
+python3 src/ttt_bringup/scripts/marty_gui.py
+# → Click "Calibration Mode"
+
+# ArUco calibration (manual)
+ros2 launch ttt_bringup calibrate_table_launch.py
+
+# Verify transforms
 ros2 run tf2_ros tf2_echo table camera_left_optical_frame
+```
+
+### Camera Control
+```bash
+# Tune exposure/gain
+v4l2-ctl -d /dev/video0 -c exposure=800 -c analogue_gain=1200
+
+# Test camera
+ros2 launch ttt_bringup camera_left.launch.py
+ros2 topic hz /camera/left/image_raw  # Should be ~240 Hz
 ```
 
 ---
 
 ## Resources
 
-- [ROS Camera Calibration Tutorial](http://wiki.ros.org/camera_calibration/Tutorials/MonocularCalibration)
-- [OpenCV Calibration Guide](https://docs.opencv.org/4.x/dc/dbb/tutorial_py_calibration.html)
-- [Understanding Camera Calibration](https://learnopencv.com/camera-calibration-using-opencv/)
-- [Stereo Vision Fundamentals](https://docs.opencv.org/4.x/dd/d53/tutorial_py_depthmap.html)
+### Documentation
+- [ROS2 Humble Docs](https://docs.ros.org/en/humble/)
+- [OpenCV Module](https://docs.opencv.org/4.x/)
+- [Jetson Orin Nano](https://developer.nvidia.com/embedded/jetson-orin-nano-developer-kit)
+- [Arducam OV9281](https://docs.arducam.com/Nvidia-Jetson-Camera/Jetvariety-Camera/OV9281/)
+
+### Calibration Resources
+- [Camera Calibration (ROS Wiki)](http://wiki.ros.org/camera_calibration)
+- [Stereo Vision Tutorial](https://docs.opencv.org/4.x/dd/d53/tutorial_py_depthmap.html)
+- [ArUco Marker Detection](https://docs.opencv.org/4.x/d5/dae/tutorial_aruco_detection.html)
+- [Online ArUco Generator](https://chev.me/arucogen/)
+
+### Team Resources
+- [Project Repository](https://github.com/jrv11706/TTT-Capstone-Sensors/tree/main)
+- [Mechanical CAD Files](link-to-cad)
+
+---
+
+---
+
+## Acknowledgments
 
 
-
-
-### Building the Project
-We use `colcon` with symlink installation to avoid redundant builds.
-
-```bash
-# Standard Build
-./build.sh
-
-# If the Jetson freezes (RAM conservation mode)
-colcon build --symlink-install --parallel-workers 1
-
-```
