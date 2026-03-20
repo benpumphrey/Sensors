@@ -19,9 +19,9 @@ find_package(OpenCV REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
 # ArUco Table Calibration Node
-add_executable(aruco_table_calibration_node src/aruco_table_calibration_node.cpp)
+add_executable(arcuo_calibrate_camera src/arcuo_calibrate_camera.cpp)
 
-ament_target_dependencies(aruco_table_calibration_node
+ament_target_dependencies(arcuo_calibrate_camera
   rclcpp
   sensor_msgs
   geometry_msgs
@@ -30,7 +30,7 @@ ament_target_dependencies(aruco_table_calibration_node
   tf2_geometry_msgs
 )
 
-target_link_libraries(aruco_table_calibration_node
+target_link_libraries(arcuo_calibrate_camera
   ${OpenCV_LIBS}
   yaml-cpp
 )
@@ -47,7 +47,7 @@ ament_target_dependencies(tf_broadcaster_node
 
 # Install executables
 install(TARGETS
-  aruco_table_calibration_node
+  arcuo_calibrate_camera
   tf_broadcaster_node
   DESTINATION lib/${PROJECT_NAME}
 )
