@@ -99,11 +99,16 @@ class CalibrationWorker(QThread):
             self.dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
             self.parameters = cv2.aruco.DetectorParameters()
             self.parameters.adaptiveThreshWinSizeMin = 3
-            self.parameters.adaptiveThreshWinSizeMax = 53
-            self.parameters.adaptiveThreshWinSizeStep = 4
-            self.parameters.minMarkerPerimeterRate = 0.01
+            self.parameters.adaptiveThreshWinSizeMax = 99
+            self.parameters.adaptiveThreshWinSizeStep = 2
+            self.parameters.adaptiveThreshConstant = 3
+            self.parameters.minMarkerPerimeterRate = 0.005
             self.parameters.maxMarkerPerimeterRate = 4.0
-            self.parameters.polygonalApproxAccuracyRate = 0.1
+            self.parameters.polygonalApproxAccuracyRate = 0.15
+            self.parameters.maxErroneousBitsInBorderRate = 0.5
+            self.parameters.errorCorrectionRate = 0.6
+            self.parameters.minCornerDistanceRate = 0.01
+            self.parameters.minDistanceToBorder = 1
             
             # Marker positions on table (standard table tennis table)
             self.marker_positions = {

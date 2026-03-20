@@ -59,18 +59,18 @@ def generate_launch_description():
            }],
        ),
 
-    #    Node(
-    #        package='ttt_trajectory',
-    #        executable='trajectory_node',
-    #        name='trajectory_node',
-    #        parameters=[{
-    #            'lookahead_ms': 250,
-    #            'min_samples': 5,
-    #            'max_samples': 20,
-    #            'gravity': 9.81,
-    #            'table_y': -0.5,    # tune this to your camera mount height
-    #            'restitution': 0.85,
-    #        }],
-    #        output='screen'
-    #    ),
+       Node(
+           package='ttt_trajectory',
+           executable='trajectory_node',
+           name='trajectory_node',
+           parameters=[{
+               'lookahead_ms': 250,
+               'min_samples': 5,
+               'max_samples': 20,
+               'gravity': 9.81,
+               'table_y': -0.5,    # tune this to your camera mount height
+               'restitution': 0.85,
+           }],
+           output='screen'
+       ),
     ])
