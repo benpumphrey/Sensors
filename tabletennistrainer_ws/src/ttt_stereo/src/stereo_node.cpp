@@ -102,7 +102,7 @@ private:
         // ── Publish ───────────────────────────────────────────────────────────
         auto out = geometry_msgs::msg::PointStamped();
         out.header.stamp = left->header.stamp;
-        out.header.frame_id = "stereo_camera_frame";
+        out.header.frame_id = "camera_left_optical_frame";
         out.point.x = X;
         out.point.y = Y;
         out.point.z = Z;

@@ -118,7 +118,7 @@ class CalibrationWorker(QThread):
         params.maxErroneousBitsInBorderRate = 0.5
         params.errorCorrectionRate = 0.6
         params.minCornerDistanceRate = 0.01
-        params.minDistanceToBorder = 1
+        params.minDistanceToBorder = 0
 
         self.status_signal.emit("Calibration mode ready")
 

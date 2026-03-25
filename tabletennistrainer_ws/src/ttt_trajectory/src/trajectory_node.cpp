@@ -97,7 +97,7 @@ private:
 
         auto predicted_msg = geometry_msgs::msg::PointStamped();
         predicted_msg.header.stamp = msg->header.stamp;
-        predicted_msg.header.frame_id = "stereo_camera_frame";
+        predicted_msg.header.frame_id = "camera_left_optical_frame";
         predicted_msg.point.x = px;
         predicted_msg.point.y = py;
         predicted_msg.point.z = pz;
