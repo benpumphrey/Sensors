@@ -50,6 +50,15 @@ _HTML_PAGE = """<!DOCTYPE html>
     .x{color:#ff5555}.y{color:#55ff55}.z{color:#5555ff}
     .px{color:#ff9999}.py{color:#99ff99}.pz{color:#9999ff}
     .land{color:#ffcc00}
+    .topics-panel{background:#1e1e1e;border-radius:10px;border:1px solid #333;padding:16px;margin:16px auto;max-width:1100px;overflow-x:auto;}
+    .tp-table{width:100%;border-collapse:collapse;font-size:12px;}
+    .tp-table th{color:#666;text-align:left;padding:4px 12px;border-bottom:1px solid #333;font-weight:normal;letter-spacing:1px;}
+    .tp-table td{padding:5px 12px;border-bottom:1px solid #222;white-space:nowrap;}
+    .tp-name{color:#ccc;font-family:Consolas,monospace;}
+    .tp-type{color:#666;}
+    .tp-age{font-weight:bold;min-width:60px;}
+    .tp-vals{color:#aaa;font-family:Consolas,monospace;white-space:pre;}
+    .fresh{color:#00ff00;}.warn{color:#ffaa00;}.stale{color:#ff4444;}
   </style>
 </head>
 <body>
@@ -181,7 +190,39 @@ _HTML_PAGE = """<!DOCTYPE html>
         });
       });
     }
+
+    function pollTopics(){
+      fetch('/api/topics').then(r=>r.json()).then(d=>{
+        var topics = Object.keys(d).sort();
+        var rows = '';
+        if(topics.length === 0){
+          rows = '<tr><td colspan="4" style="color:#444;text-align:center;padding:12px;">waiting for data...</td></tr>';
+        } else {
+          topics.forEach(function(name){
+            var t = d[name];
+            var age = t.age_ms;
+            var ageStr = age === null ? 'never' : age < 1000 ? age+'ms' : (age/1000).toFixed(1)+'s';
+            var ageCls = age === null ? 'stale' : age < 150 ? 'fresh' : age < 1000 ? 'warn' : 'stale';
+            var vals = Object.entries(t.values).map(function(e){ return e[0]+': '+e[1]; }).join('    ');
+            rows += '<tr><td class="tp-name">'+name+'</td><td class="tp-type">'+t.type+'</td>'
+                  + '<td class="tp-age '+ageCls+'">'+ageStr+'</td><td class="tp-vals">'+vals+'</td></tr>';
+          });
+        }
+        document.getElementById('topics-tbody').innerHTML = rows;
+      }).catch(function(){});
+      setTimeout(pollTopics, 250);
+    }
+    pollTopics();
   </script>
+  <div class="topics-panel">
+    <div class="hdr">ROS TOPICS</div>
+    <table class="tp-table">
+      <thead><tr><th>TOPIC</th><th>TYPE</th><th>AGE</th><th>VALUES</th></tr></thead>
+      <tbody id="topics-tbody">
+        <tr><td colspan="4" style="color:#444;text-align:center;padding:12px;">waiting for data...</td></tr>
+      </tbody>
+    </table>
+  </div>
 </body>
 </html>"""
 
@@ -231,6 +272,7 @@ class WebStreamer:
     def __init__(self):
         self._frames = {'left': None, 'right': None}
         self._stats = {'x':0.0, 'y':0.0, 'z':0.0, 'px':None, 'py':None, 'pz':None, 'land_x':None, 'land_z':None}
+        self._topic_data = {}  # topic -> {type, last_t, values}
         self._app = Flask(__name__)
         logging.getLogger('werkzeug').setLevel(logging.ERROR)
         
@@ -247,6 +289,15 @@ class WebStreamer:
             
         @self._app.route('/api/stats')
         def stats(): return Response(json.dumps(self._stats), mimetype='application/json')
+
+        @self._app.route('/api/topics')
+        def topics():
+            now = time.time()
+            out = {}
+            for name, d in list(self._topic_data.items()):
+                age_ms = int((now - d['last_t']) * 1000) if d.get('last_t') else None
+                out[name] = {'type': d['type'], 'age_ms': age_ms, 'values': d['values']}
+            return Response(json.dumps(out), mimetype='application/json')
 
         @self._app.route('/api/set_net_z', methods=['POST'])
         def set_net_z():
@@ -331,6 +382,13 @@ class ROSWorker(threading.Thread):
     def __init__(self, ws):
         super().__init__(); self.daemon = True; self.ws = ws
         self.trail = deque(maxlen=25); self.pred = None; self.land = None; self.dets = {'left':None, 'right':None}
+        self._cam_count = {'left': 0, 'right': 0}
+        self._cam_t0    = {}
+        self._cam_fps   = {'left': 0.0, 'right': 0.0}
+
+    def _rec(self, topic, typ, values):
+        """Record latest value for a topic (used by /api/topics)."""
+        self.ws._topic_data[topic] = {'type': typ, 'last_t': time.time(), 'values': values}
 
     def run(self):
         rclpy.init()
@@ -341,21 +399,51 @@ class ROSWorker(threading.Thread):
         self.n.create_subscription(PointStamped, '/ball_position_3d', self.cb_3d, q)
         self.n.create_subscription(PointStamped, '/ball_trajectory/predicted', self.cb_pred, q)
         self.n.create_subscription(PointStamped, '/ball_trajectory/landing', self.cb_land, q)
-        self.n.create_subscription(BallDetection, '/ball_detection/left', lambda m: self.dets.update({'left':m}), q)
-        self.n.create_subscription(BallDetection, '/ball_detection/right', lambda m: self.dets.update({'right':m}), q)
+        self.n.create_subscription(BallDetection, '/ball_detection/left',
+            lambda m: (self.dets.update({'left': m}),
+                       self._rec('/ball_detection/left', 'BallDetection',
+                           {'x': round(m.x, 1), 'y': round(m.y, 1),
+                            'radius': round(getattr(m, 'radius', 0.0), 1),
+                            'conf': round(getattr(m, 'confidence', 0.0), 3)})), q)
+        self.n.create_subscription(BallDetection, '/ball_detection/right',
+            lambda m: (self.dets.update({'right': m}),
+                       self._rec('/ball_detection/right', 'BallDetection',
+                           {'x': round(m.x, 1), 'y': round(m.y, 1),
+                            'radius': round(getattr(m, 'radius', 0.0), 1),
+                            'conf': round(getattr(m, 'confidence', 0.0), 3)})), q)
         rclpy.spin(self.n)
 
-    def cb_3d(self, m): 
+    def cb_3d(self, m):
         self.trail.append((m.point.x, m.point.y, m.point.z))
-        self.ws._stats.update({'x':m.point.x, 'y':m.point.y, 'z':m.point.z})
-    def cb_pred(self, m): 
+        self.ws._stats.update({'x': m.point.x, 'y': m.point.y, 'z': m.point.z})
+        self._rec('/ball_position_3d', 'PointStamped',
+                  {'x': round(m.point.x, 3), 'y': round(m.point.y, 3), 'z': round(m.point.z, 3)})
+
+    def cb_pred(self, m):
         self.pred = (m.point.x, m.point.y, m.point.z)
-        self.ws._stats.update({'px':m.point.x, 'py':m.point.y, 'pz':m.point.z})
-    def cb_land(self, m): 
+        self.ws._stats.update({'px': m.point.x, 'py': m.point.y, 'pz': m.point.z})
+        self._rec('/ball_trajectory/predicted', 'PointStamped',
+                  {'x': round(m.point.x, 3), 'y': round(m.point.y, 3), 'z': round(m.point.z, 3)})
+
+    def cb_land(self, m):
         self.land = (m.point.x, m.point.z)
-        self.ws._stats.update({'land_x':m.point.x, 'land_z':m.point.z})
+        self.ws._stats.update({'land_x': m.point.x, 'land_z': m.point.z})
+        self._rec('/ball_trajectory/landing', 'PointStamped',
+                  {'x': round(m.point.x, 3), 'z': round(m.point.z, 3)})
 
     def pf(self, msg, side):
+        # Track FPS per camera
+        now = time.time()
+        self._cam_count[side] += 1
+        if side not in self._cam_t0:
+            self._cam_t0[side] = now
+        elif now - self._cam_t0[side] >= 1.0:
+            self._cam_fps[side] = self._cam_count[side] / (now - self._cam_t0[side])
+            self._cam_count[side] = 0
+            self._cam_t0[side] = now
+        self._rec(f'/camera/{side}/compressed', 'CompressedImage',
+                  {'fps': round(self._cam_fps[side], 1)})
+
         frame = cv2.imdecode(np.frombuffer(msg.data, np.uint8), 1)
         if frame is not None:
             # Draw auto-detected table ROI polygon (green)

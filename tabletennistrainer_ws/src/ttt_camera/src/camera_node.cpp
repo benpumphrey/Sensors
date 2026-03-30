@@ -11,9 +11,9 @@ public:
     CameraNode() : Node("camera_node"), frame_count_(0) {
         this->declare_parameter("device", "/dev/video0");
         this->declare_parameter("camera_id", "left");
-        this->declare_parameter("width", 1280);
-        this->declare_parameter("height", 800);
-        this->declare_parameter("fps", 120);
+        this->declare_parameter("width", 640);
+        this->declare_parameter("height", 400);
+        this->declare_parameter("fps", 240);
         this->declare_parameter("exposure", 7000);
         this->declare_parameter("analogue_gain", 1000);
 
@@ -56,9 +56,9 @@ public:
         compressed_pub_ = this->create_publisher<sensor_msgs::msg::CompressedImage>(
             "/camera/" + camera_id_ + "/compressed", 10);
 
-        // 120 FPS = ~8.33ms per frame
+        // 240 FPS = ~4.17ms per frame
         timer_ = this->create_wall_timer(
-            std::chrono::microseconds(8333),
+            std::chrono::microseconds(4167),
             std::bind(&CameraNode::captureFrame, this));
         fps_timer_ = this->create_wall_timer(
             std::chrono::seconds(1),
