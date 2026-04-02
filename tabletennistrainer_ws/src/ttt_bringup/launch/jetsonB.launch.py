@@ -1,3 +1,4 @@
+import sys, os; sys.path.insert(0, os.path.dirname(__file__)); from calibration import PARAMS
 from launch import LaunchDescription
 from launch_ros.actions import Node
 
@@ -14,11 +15,11 @@ def generate_launch_description():
             parameters=[{
                 'device': '/dev/video0',
                 'camera_id': 'right',
-                'width': 640,
-                'height': 400,
-                'fps': 240,
-                'exposure': 7000,
-                'analogue_gain': 1200,
+                'width': PARAMS['width'],
+                'height': PARAMS['height'],
+                'fps': PARAMS['fps'],
+                'exposure': PARAMS['exposure'],
+                'analogue_gain': PARAMS['analogue_gain'],
             }],
             output='screen'
         ),
@@ -30,12 +31,13 @@ def generate_launch_description():
             name='ball_detector_right',
             parameters=[{
                 'camera_id': 'right',
-                'min_area': 1,
-                'max_area': 2000,
-                'motion_threshold': 5,
-                'min_contrast': 5,
-                'dilate_iters': 1,
-                'edge_margin': 10,
+                'min_area': PARAMS['min_area'],
+                'max_area': PARAMS['max_area'],
+                'motion_threshold': PARAMS['motion_threshold'],
+                'min_contrast': PARAMS['min_contrast'],
+                'dilate_iters': PARAMS['dilate_iters'],
+                'edge_margin': PARAMS['edge_margin'],
+                **({'table_roi': PARAMS['table_roi_right']} if PARAMS['table_roi_right'] else {}),
             }],
             output='screen'
         ),

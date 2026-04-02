@@ -5,6 +5,7 @@
 #include <message_filters/synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <chrono>
+#include <cmath>
 
 using BallDetection = ttt_msgs::msg::BallDetection;
 using ApproxPolicy = message_filters::sync_policies::ApproximateTime<BallDetection, BallDetection>;
@@ -12,120 +13,146 @@ using ApproxPolicy = message_filters::sync_policies::ApproximateTime<BallDetecti
 class StereoNode : public rclcpp::Node {
 public:
     StereoNode() : Node("stereo_node") {
-
-        // ── Camera Intrinsics (replace with real calibration later) ──────────
-        // fx/fy: focal length in pixels.
-        //   Estimate: fx ≈ width / (2 * tan(FOV/2))
-        //   For 640px wide, ~90° FOV → fx ≈ 320
+        // Lens Params
         this->declare_parameter("fx", 448.2);
         this->declare_parameter("fy", 400.0);
-        // cx/cy: principal point — default to image center
-        this->declare_parameter("cx", 640.0);
-        this->declare_parameter("cy", 400.0);
-        // baseline: physical distance between the two cameras in meters
-        this->declare_parameter("baseline_m", 0.3);
-        // max age: reject detection pairs further apart than this (ms)
+        this->declare_parameter("cx", 320.0);
+        this->declare_parameter("cy", 200.0);
+        this->declare_parameter("baseline_m", 1.525);
         this->declare_parameter("max_sync_age_ms", 50);
 
-        fx_         = this->get_parameter("fx").as_double();
-        fy_         = this->get_parameter("fy").as_double();
-        cx_         = this->get_parameter("cx").as_double();
-        cy_         = this->get_parameter("cy").as_double();
-        baseline_   = this->get_parameter("baseline_m").as_double();
-        max_sync_age_ms_ = this->get_parameter("max_sync_age_ms").as_int();
+        // Alignment Params
+        this->declare_parameter("pan_left_deg", 15.0);
+        this->declare_parameter("pan_right_deg", 15.0);
+        this->declare_parameter("roll_left_deg", 0.0);
+        this->declare_parameter("roll_right_deg", 0.0);
+        this->declare_parameter("tilt_left_deg", 45.0);
+        this->declare_parameter("tilt_right_deg", 45.0);
+        
+        // Origin Shift Params
+        this->declare_parameter("height_m", 1.25);   // Avg height for Y-zero
+        this->declare_parameter("net_dist_m", 0.52); // Dist to net for Z-zero
 
-        RCLCPP_INFO(this->get_logger(),
-            "Stereo params | fx=%.1f fy=%.1f cx=%.1f cy=%.1f baseline=%.3fm",
-            fx_, fy_, cx_, cy_, baseline_);
+        load_params();
 
-        // ── Subscriptions with ApproximateTime sync ───────────────────────────
-        // Queue size 10, will pair left+right detections within max_sync_age_ms
+        param_cb_ = this->add_on_set_parameters_callback(
+            [this](const std::vector<rclcpp::Parameter> &params) {
+                for (const auto &p : params) {
+                    if (p.get_name() == "pan_left_deg") pan_l_rad_ = p.as_double() * M_PI / 180.0;
+                    if (p.get_name() == "pan_right_deg") pan_r_rad_ = p.as_double() * M_PI / 180.0;
+                    if (p.get_name() == "tilt_left_deg") tilt_l_rad_ = p.as_double() * M_PI / 180.0;
+                    if (p.get_name() == "tilt_right_deg") tilt_r_rad_ = p.as_double() * M_PI / 180.0;
+                    if (p.get_name() == "roll_left_deg") roll_l_rad_ = p.as_double() * M_PI / 180.0;
+                    if (p.get_name() == "roll_right_deg") roll_r_rad_ = p.as_double() * M_PI / 180.0;
+                    if (p.get_name() == "baseline_m") baseline_ = p.as_double();
+                }
+                rcl_interfaces::msg::SetParametersResult res;
+                res.successful = true;
+                return res;
+            });
+
         left_sub_.subscribe(this, "/ball_detection/left");
         right_sub_.subscribe(this, "/ball_detection/right");
+        sync_ = std::make_shared<message_filters::Synchronizer<ApproxPolicy>>(ApproxPolicy(10), left_sub_, right_sub_);
+        sync_->registerCallback(std::bind(&StereoNode::syncCallback, this, std::placeholders::_1, std::placeholders::_2));
 
-        sync_ = std::make_shared<message_filters::Synchronizer<ApproxPolicy>>(
-            ApproxPolicy(10), left_sub_, right_sub_);
-        sync_->registerCallback(
-            std::bind(&StereoNode::syncCallback, this,
-                std::placeholders::_1, std::placeholders::_2));
-
-        // ── Publisher ─────────────────────────────────────────────────────────
-        position_pub_ = this->create_publisher<geometry_msgs::msg::PointStamped>(
-            "/ball_position_3d", 10);
-
-        RCLCPP_INFO(this->get_logger(), "Stereo node ready.");
+        position_pub_ = this->create_publisher<geometry_msgs::msg::PointStamped>("/ball_position_3d", 10);
     }
 
 private:
-    void syncCallback(
-        const BallDetection::ConstSharedPtr& left,
-        const BallDetection::ConstSharedPtr& right)
-    {
-        // ── Reject if either camera has no detection ──────────────────────────
-        if (left->x < 0 || right->x < 0) {
-            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                "Waiting for detection on both cameras...");
-            return;
-        }
-
-        // ── Reject if timestamps are too far apart ────────────────────────────
-        auto dt_ns = std::abs(
-            (rclcpp::Time(left->header.stamp) - rclcpp::Time(right->header.stamp)).nanoseconds());
-        if (dt_ns > (int64_t)max_sync_age_ms_ * 1'000'000) {
-            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 500,
-                "Detection timestamps too far apart: %.1f ms — skipping",
-                dt_ns / 1e6);
-            return;
-        }
-
-        // ── Triangulation ─────────────────────────────────────────────────────
-        // disparity: with cameras facing each other (one on each side of the table)
-        // the right camera's image is horizontally mirrored relative to the left,
-        // so use right->x - left->x to get a positive disparity for real objects.
-        double disparity = right->x - left->x;
-
-        if (std::abs(disparity) < 1.0) {
-            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 500,
-                "Disparity too small (%.2f px) — ball may be too far or detections mismatched",
-                disparity);
-            return;
-        }
-
-        // Z (depth) = (fx * baseline) / disparity
-        double Z = (fx_ * baseline_) / disparity;
-
-        // X = (u_left - cx) * Z / fx
-        double X = (left->x - cx_) * Z / fx_;
-
-        // Y = (v_left - cy) * Z / fy  (average left+right for robustness)
-        double v_avg = (left->y + right->y) / 2.0;
-        double Y = (v_avg - cy_) * Z / fy_;
-
-        // ── Publish ───────────────────────────────────────────────────────────
-        auto out = geometry_msgs::msg::PointStamped();
-        out.header.stamp = left->header.stamp;
-        out.header.frame_id = "camera_left_optical_frame";
-        out.point.x = X;
-        out.point.y = Y;
-        out.point.z = Z;
-
-        position_pub_->publish(out);
-
-        RCLCPP_INFO(this->get_logger(),
-            "Ball 3D | X: %+.3f m  Y: %+.3f m  Z: %.3f m  | disparity: %.1f px  dt: %.1f ms",
-            X, Y, Z, disparity, dt_ns / 1e6);
+    void load_params() {
+        fx_ = this->get_parameter("fx").as_double();
+        fy_ = this->get_parameter("fy").as_double();
+        cx_ = this->get_parameter("cx").as_double();
+        cy_ = this->get_parameter("cy").as_double();
+        baseline_ = this->get_parameter("baseline_m").as_double();
+        max_sync_age_ms_ = this->get_parameter("max_sync_age_ms").as_int();
+        pan_l_rad_ = this->get_parameter("pan_left_deg").as_double() * M_PI / 180.0;
+        pan_r_rad_ = this->get_parameter("pan_right_deg").as_double() * M_PI / 180.0;
+        tilt_l_rad_ = this->get_parameter("tilt_left_deg").as_double() * M_PI / 180.0;
+        tilt_r_rad_ = this->get_parameter("tilt_right_deg").as_double() * M_PI / 180.0;
+        roll_l_rad_ = this->get_parameter("roll_left_deg").as_double() * M_PI / 180.0;
+        roll_r_rad_ = this->get_parameter("roll_right_deg").as_double() * M_PI / 180.0;
     }
 
-    // Intrinsics
-    double fx_, fy_, cx_, cy_, baseline_;
-    int max_sync_age_ms_;
+    void syncCallback(const BallDetection::ConstSharedPtr& left, const BallDetection::ConstSharedPtr& right) {
+        if (left->x < 0 || right->x < 0) return;
 
-    // Sync
+        double ul = (left->x - cx_) / fx_;
+        double vl = (left->y - cy_) / fy_;
+        double ur = (right->x - cx_) / fx_;
+        double vr = (right->y - cy_) / fy_;
+
+        // Left Ray Construction
+        double xl1 = ul * cos(roll_l_rad_) + vl * sin(roll_l_rad_);
+        double yl1 = -ul * sin(roll_l_rad_) + vl * cos(roll_l_rad_);
+        double zl1 = 1.0;
+        double xl2 = xl1;
+        double yl2 = yl1 * cos(tilt_l_rad_) + zl1 * sin(tilt_l_rad_);
+        double zl2 = -yl1 * sin(tilt_l_rad_) + zl1 * cos(tilt_l_rad_);
+        double dl_x = xl2 * cos(pan_l_rad_) + zl2 * sin(pan_l_rad_);
+        double dl_y = yl2;
+        double dl_z = -xl2 * sin(pan_l_rad_) + zl2 * cos(pan_l_rad_);
+
+        // Right Ray Construction
+        double xr1 = ur * cos(roll_r_rad_) + vr * sin(roll_r_rad_);
+        double yr1 = -ur * sin(roll_r_rad_) + vr * cos(roll_r_rad_);
+        double zr1 = 1.0;
+        double xr2 = xr1;
+        double yr2 = yr1 * cos(tilt_r_rad_) + zr1 * sin(tilt_r_rad_);
+        double zr2 = -yr1 * sin(tilt_r_rad_) + zr1 * cos(tilt_r_rad_);
+        double dr_x = xr2 * cos(-pan_r_rad_) + zr2 * sin(-pan_r_rad_);
+        double dr_y = yr2;
+        double dr_z = -xr2 * sin(-pan_r_rad_) + zr2 * cos(-pan_r_rad_);
+
+        // Intersection Math
+        double w0_x = -baseline_; double w0_y = 0.0; double w0_z = 0.0;
+        double a = dl_x*dl_x + dl_y*dl_y + dl_z*dl_z;
+        double b = dl_x*dr_x + dl_y*dr_y + dl_z*dr_z;
+        double c = dr_x*dr_x + dr_y*dr_y + dr_z*dr_z;
+        double d = w0_x*dl_x + w0_y*dl_y + w0_z*dl_z;
+        double e = w0_x*dr_x + w0_y*dr_y + w0_z*dr_z;
+
+        double denom = a*c - b*b;
+        if (std::abs(denom) < 1e-6) return;
+
+        double s = (b*e - c*d) / denom;
+        double t = (a*e - b*d) / denom;
+
+        // Raw 3D Point in Camera Space
+        double raw_x = (s * dl_x + baseline_ + t * dr_x) / 2.0;
+        double raw_y = (s * dl_y + t * dr_y) / 2.0;
+        double raw_z = (s * dl_z + t * dr_z) / 2.0;
+
+        // --- THE TRIPLE ORIGIN SHIFT ---
+        // 1. Center X (Table Center = 0)
+        double out_x = raw_x - (baseline_ / 2.0);
+
+        // 2. Center Y (Table Surface = 0). 
+        // Camera Y is positive down. Subtracting from cam height makes 'up' positive.
+        double cam_h = this->get_parameter("height_m").as_double();
+        double out_y = cam_h - raw_y;
+
+        // 3. Center Z (Net = 0)
+        double net_z = this->get_parameter("net_dist_m").as_double();
+        double out_z = raw_z - net_z;
+
+        auto out = geometry_msgs::msg::PointStamped();
+        out.header.stamp = left->header.stamp;
+        out.header.frame_id = "table_origin";
+        out.point.x = out_x;
+        out.point.y = out_y;
+        out.point.z = out_z;
+        position_pub_->publish(out);
+    }
+
+    double fx_, fy_, cx_, cy_, baseline_;
+    double pan_l_rad_, pan_r_rad_, tilt_l_rad_, tilt_r_rad_, roll_l_rad_, roll_r_rad_;
+    int max_sync_age_ms_;
     message_filters::Subscriber<BallDetection> left_sub_, right_sub_;
     std::shared_ptr<message_filters::Synchronizer<ApproxPolicy>> sync_;
-
-    // Publisher
     rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr position_pub_;
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;
 };
 
 int main(int argc, char** argv) {

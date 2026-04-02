@@ -1,9 +1,9 @@
+import sys, os; sys.path.insert(0, os.path.dirname(__file__)); from calibration import PARAMS
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
-import os
 
 def generate_launch_description():
     calibration_dir = get_package_share_directory('ttt_calibration')
@@ -53,12 +53,12 @@ def generate_launch_description():
             name='camera_left',
             parameters=[{
                 'device': '/dev/video0',
-            'camera_id': 'left',
-                'width': 640,
-                'height': 400,
-                'fps': 240,
-                'exposure': 7000,
-                'analogue_gain': 1200,
+                'camera_id': 'left',
+                'width': PARAMS['width'],
+                'height': PARAMS['height'],
+                'fps': PARAMS['fps'],
+                'exposure': PARAMS['exposure'],
+                'analogue_gain': PARAMS['analogue_gain'],
             }],
             output='screen'
         ),
@@ -70,12 +70,13 @@ def generate_launch_description():
             name='ball_detector_left',
             parameters=[{
                 'camera_id': 'left',
-                'min_area': 1,
-                'max_area': 2000,
-                'motion_threshold': 5,
-                'min_contrast': 5,
-                'dilate_iters': 1,
-                'edge_margin': 10,
+                'min_area': PARAMS['min_area'],
+                'max_area': PARAMS['max_area'],
+                'motion_threshold': PARAMS['motion_threshold'],
+                'min_contrast': PARAMS['min_contrast'],
+                'dilate_iters': PARAMS['dilate_iters'],
+                'edge_margin': PARAMS['edge_margin'],
+                **({'table_roi': PARAMS['table_roi_left']} if PARAMS['table_roi_left'] else {}),
             }],
             output='screen'
         ),
@@ -85,12 +86,12 @@ def generate_launch_description():
             package='ttt_stereo',
             executable='stereo_node',
             parameters=[{
-                'baseline_m': 1.5,
-                'fx': 448.2,
-                'fy': 400.0,
-                'cx': 640.0,
-                'cy': 400.0,
-                'max_sync_age_ms': 50,
+                'fx': PARAMS['fx'],
+                'fy': PARAMS['fy'],
+                'cx': PARAMS['cx'],
+                'cy': PARAMS['cy'],
+                'baseline_m': PARAMS['baseline_m'],
+                'max_sync_age_ms': PARAMS['max_sync_age_ms'],
             }],
         ),
 
@@ -100,13 +101,14 @@ def generate_launch_description():
             executable='trajectory_node',
             name='trajectory_node',
             parameters=[{
-                'lookahead_ms': 100,
-                'min_samples': 3,
-                'max_samples': 12,
-                'gravity': 9.81,
-                'camera_tilt_deg': 31.0,
-                'table_y': 0.0,    
-                'restitution': 0.85,
+                'lookahead_ms': PARAMS['lookahead_ms'],
+                'min_samples': PARAMS['min_samples'],
+                'max_samples': PARAMS['max_samples'],
+                'gravity': PARAMS['gravity'],
+                'camera_tilt_deg': PARAMS['camera_tilt_deg'],
+                'table_y': PARAMS['table_y'],
+                'restitution': PARAMS['restitution'],
+                'net_z': PARAMS['net_z'],
             }],
             output='screen'
         ),
