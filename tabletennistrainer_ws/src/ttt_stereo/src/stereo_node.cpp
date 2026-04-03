@@ -33,6 +33,12 @@ public:
         this->declare_parameter("height_m", 1.25);   // Avg height for Y-zero
         this->declare_parameter("net_dist_m", 0.52); // Dist to net for Z-zero
 
+        // 3D Workspace Limits (Table Frame)
+        this->declare_parameter("limit_x_m", 1.5);         // Max distance left/right of center
+        this->declare_parameter("limit_y_top_m", 2.0);     // Max height above table
+        this->declare_parameter("limit_y_bottom_m", -0.2); // Max depth below table surface
+        this->declare_parameter("limit_z_m", 2.5);         // Max distance forward/back from net
+
         load_params();
 
         param_cb_ = this->add_on_set_parameters_callback(
@@ -124,6 +130,23 @@ private:
         double raw_y = (s * dl_y + t * dr_y) / 2.0;
         double raw_z = (s * dl_z + t * dr_z) / 2.0;
 
+        // --- 0. GHOST POINT FILTER (Ray Miss Distance) ---
+        // If the cameras detected two different background objects, their rays won't physically intersect
+        double pL_x = s * dl_x;
+        double pL_y = s * dl_y;
+        double pL_z = s * dl_z;
+        
+        double pR_x = baseline_ + t * dr_x;
+        double pR_y = t * dr_y;
+        double pR_z = t * dr_z;
+        
+        double ray_miss_dist = std::sqrt(std::pow(pL_x - pR_x, 2) + std::pow(pL_y - pR_y, 2) + std::pow(pL_z - pR_z, 2));
+        
+        // If rays miss each other by more than 25cm, they are looking at different things! (Ghost point)
+        if (ray_miss_dist > 0.25) {
+            return;
+        }
+
         // --- THE TRIPLE ORIGIN SHIFT ---
         // 1. Center X (Table Center = 0)
         double out_x = raw_x - (baseline_ / 2.0);
@@ -137,9 +160,20 @@ private:
         double net_z = this->get_parameter("net_dist_m").as_double();
         double out_z = raw_z - net_z;
 
+        // --- 4. 3D WORKSPACE BOUNDING BOX ---
+        // Reject background lights and noise that triangulate outside the play area
+        double lim_x   = this->get_parameter("limit_x_m").as_double();
+        double lim_y_t = this->get_parameter("limit_y_top_m").as_double();
+        double lim_y_b = this->get_parameter("limit_y_bottom_m").as_double();
+        double lim_z   = this->get_parameter("limit_z_m").as_double();
+
+        if (std::abs(out_x) > lim_x || out_y > lim_y_t || out_y < lim_y_b || std::abs(out_z) > lim_z) {
+            return; // Out of bounds, ignore entirely
+        }
+
         auto out = geometry_msgs::msg::PointStamped();
         out.header.stamp = left->header.stamp;
-        out.header.frame_id = "table_origin";
+        out.header.frame_id = "table";
         out.point.x = out_x;
         out.point.y = out_y;
         out.point.z = out_z;

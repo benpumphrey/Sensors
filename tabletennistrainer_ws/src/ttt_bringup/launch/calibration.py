@@ -5,54 +5,54 @@
 
 PARAMS = {
 
-    # ── Camera ────────────────────────────────────────────────────────────────
-    'exposure':         7000,
-    'analogue_gain':    1200,
-    'width':             640,
-    'height':            400,
-    'fps':               240,
+    # ── Camera Hardware ───────────────────────────────────────────────────────
+    'exposure':          10000,   # Increase for more light (Warning: Too high will drop FPS below 240)
+    'analogue_gain':      1600,   # Increase for more digital brightness without dropping FPS
+    'width':               640,
+    'height':              400,
+    'fps':                 240,
 
     # ── Ball Detection (vision_node) ──────────────────────────────────────────
-    'min_area':             1,
-    'max_area':          2000,
-    'motion_threshold':     5,
-    'min_contrast':         14,
-    'dilate_iters':         1,
-    'edge_margin':         10,
+    'min_area':                4,
+    'max_area':             300,
+    'motion_threshold':      10,   # Increased to bias towards distinct motion and ignore edge flicker
+    'min_contrast':         65,
+    'dilate_iters':          1,
+    'edge_margin':          10,
+    'table_roi_left':     [103, 154, 336, 42, 531, 137, 237, 381],
+    'table_roi_right':    [313, 25, 545, 98, 446, 345, 132, 132],
 
-    # ── Table ROI (pixels) — empty = auto-detect from dark surface on startup ─
-    # Set by GUI calibration (/api/set_roi) or edit manually.
-    # Format: [x0,y0, x1,y1, x2,y2, x3,y3]  (top-left → top-right → bottom-right → bottom-left)
-    'table_roi_left':  [169, 177, 378, 123, 516, 198, 216, 326],
-    'table_roi_right': [290, 41, 510, 87, 464, 258, 143, 132],
+    # ── Stereo Camera Intrinsic Lenses ────────────────────────────────────────
+    'fx':                448.0,
+    'fy':                448.0,
+    'cx':                320.0,
+    'cy':                200.0,
+    
+    # ── Stereo Alignment & Origin Shift (stereo_node) ─────────────────────────
+    'baseline_m':        1.397,   # Distance between cameras
+    'max_sync_age_ms':      15,   
+    'net_dist_z':         0.61,   # Z-distance from cameras to the physical net
+    'height_left':        0.7,   # Physical height of Left Cam
+    'height_right':       0.64,   # Physical height of Right Cam
+    'pan_left_deg':       29.0,
+    'pan_right_deg':      28.8,
+    'tilt_left_deg':      33.4,
+    'tilt_right_deg':     35.6,
+    'roll_left_deg':     -17.1,
+    'roll_right_deg':      7.9,
+    'limit_x_m':           1.5,   # 3D bounding box (width max +/-)
+    'limit_y_top_m':       2.0,   # 3D bounding box (height max)
+    'limit_y_bottom_m':   -0.2,   # 3D bounding box (height min)
+    'limit_z_m':           2.5,   # 3D bounding box (depth max +/-)
 
-    # ── Stereo Triangulation (stereo_node) ────────────────────────────────────
-    # Cameras are mounted on the side rails, midway between MARTY's end and the net.
-    # Baseline = distance between the two cameras across the table width.
-    'fx':              448.0,   # focal length x (pixels)
-    'fy':              448.0,   # focal length y (pixels)
-    'cx':              320.0,   # principal point x (pixels) — half image width
-    'cy':              200.0,   # principal point y (pixels) — half image height
-    'baseline_m':      1.397,   # distance between cameras (m) — measured 4ft 7in
-    'max_sync_age_ms':    50,   # max timestamp gap between left/right detections (ms)
-    'pan_left_deg':     17.1,
-    'net_dist_z': 0.56,
-    'height_right': 0.34,
-    'height_left': 0.58,
-    'tilt_right_deg': 27.2,
-    'tilt_left_deg': 21.7,   # left camera pan inward toward table (degrees)
-    'pan_right_deg':    17.1,
-    'roll_left_deg':    -14.0,
-    'roll_right_deg':   13.8,   # right camera pan inward toward table (degrees)
-
-    # ── Trajectory Prediction (trajectory_node) ───────────────────────────────
-    'lookahead_ms':      100,   # how far ahead to predict (ms)
-    'min_samples':         3,   # min detections before predicting
-    'max_samples':        12,   # rolling window size
-    'gravity':          9.81,   # m/s²
-    'camera_tilt_deg':  44.0,   # camera tilt downward from horizontal (degrees)
-    'table_y':           1.23,   # Y coordinate of table surface in camera frame (tune after mount)
-    'restitution':      0.85,   # energy retained after bounce (0–1)
-    'net_z':           0.5207,  # Z of net in camera frame; negative = gate disabled
-
+    # ── Robust Trajectory Prediction (trajectory_node) ────────────────────────
+    'lookahead_ms':        150,   # How far AFTER the bounce to intercept the ball (ms)
+    'min_samples':           5,   # Min detections before predicting
+    'max_samples':          10,   # Rolling window size
+    'gravity':            9.81,   # m/s^2
+    'restitution':        0.85,   # Energy retained after bounce (0–1)
+    'min_incoming_speed':  0.5,   # MIN SPEED: Ignore shots slower than 0.5 m/s
+    'net_margin_z':       -0.2,   # ORIGIN GATE: Shot must have crossed Z > -0.2m
+    'max_track_z':         1.5,  # END OF TABLE: Ignore noise beyond this Z depth
+    'max_velocity':        25.0,  # SPEED LIMIT: Ignore tracking jumps > 25 m/s (~56mph)
 }

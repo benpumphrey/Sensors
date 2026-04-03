@@ -13,17 +13,17 @@ public:
     VisionNode() : Node("vision_node") {
         this->declare_parameter("camera_id", "left");
         this->declare_parameter("min_area", 8);
-        this->declare_parameter("max_area", 2000);
+        this->declare_parameter("max_area", 150);
         this->declare_parameter("edge_margin", 10);
         this->declare_parameter("motion_threshold", 15);
         this->declare_parameter("min_contrast", 25);
         this->declare_parameter("dilate_iters", 1);
         this->declare_parameter("consistency_min", 2);
-        this->declare_parameter("kf_gate_px", 150.0);
+        this->declare_parameter("kf_gate_px", 250.0);
         this->declare_parameter("kf_reset_misses", 30);
         this->declare_parameter("kf_process_noise", 0.05);
-        this->declare_parameter("hysteresis_r", 1);
-        this->declare_parameter("hysteresis_thresh", 180);
+        this->declare_parameter("hysteresis_r", 12);
+        this->declare_parameter("hysteresis_thresh", 140);
         this->declare_parameter("table_roi", std::vector<int64_t>{});
 
         // NEW: Static mode for calibration
@@ -59,11 +59,16 @@ public:
         open_kernel_ = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
         detect_kernel_ = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(9, 9));
 
+        gpu_open_filter_ = cv::cuda::createMorphologyFilter(cv::MORPH_OPEN, CV_8UC1, open_kernel_);
+        gpu_close_filter_ = cv::cuda::createMorphologyFilter(cv::MORPH_CLOSE, CV_8UC1, dilate_kernel_);
+
         kf_ = cv::KalmanFilter(4, 2, 0, CV_32F);
         kf_.measurementMatrix = (cv::Mat_<float>(2, 4) << 1, 0, 0, 0, 0, 1, 0, 0);
         cv::setIdentity(kf_.processNoiseCov, cv::Scalar::all(kf_process_noise_));
         cv::setIdentity(kf_.measurementNoiseCov, cv::Scalar::all(0.1f));
         cv::setIdentity(kf_.errorCovPost, cv::Scalar::all(1.0f));
+
+        history_ring_.resize(frame_delay_ + 1);
 
         param_cb_ = this->add_on_set_parameters_callback(
             [this](const std::vector<rclcpp::Parameter>& params) {
@@ -72,11 +77,17 @@ public:
                 for (const auto& p : params) {
                     if (p.get_name() == "static_mode") static_mode_ = p.as_bool();
                     if (p.get_name() == "min_contrast") min_contrast_ = p.as_int();
+                    if (p.get_name() == "edge_margin") {
+                        edge_margin_ = p.as_int();
+                        roi_mask_ = cv::Mat(); // Force rebuild to apply new margin
+                        gpu_roi_mask_ = cv::cuda::GpuMat();
+                    }
                     if (p.get_name() == "table_roi") {
                         auto vals = p.as_integer_array();
                         if (vals.empty()) {
                             table_roi_.clear();
                             roi_mask_ = cv::Mat();
+                            gpu_roi_mask_ = cv::cuda::GpuMat();
                             auto_detect_ = true;
                             detect_attempt_ = 0;
                         }
@@ -85,6 +96,7 @@ public:
                             for (size_t i = 0; i < vals.size(); i += 2)
                                 table_roi_.emplace_back((int)vals[i], (int)vals[i + 1]);
                             roi_mask_ = cv::Mat();
+                            gpu_roi_mask_ = cv::cuda::GpuMat();
                             auto_detect_ = false;
                         }
                     }
@@ -149,46 +161,75 @@ private:
             std::vector<cv::Point> extended_hull;
             cv::convexHull(extended_roi, extended_hull);
             cv::fillPoly(roi_mask_, std::vector<std::vector<cv::Point>>{extended_hull}, 255);
+            
+            // Erode the ROI mask to physically shrink the tracking zone INSIDE the table's white lines
+            if (edge_margin_ > 0) {
+                int k_size = edge_margin_ * 2 + 1;
+                cv::Mat roi_erode = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(k_size, k_size));
+                cv::erode(roi_mask_, roi_mask_, roi_erode);
+            }
+            gpu_roi_mask_.upload(roi_mask_);
         }
 
         gpu_frame_.upload(img);
         gaussian_filter_->apply(gpu_frame_, gpu_blurred_);
 
-        if (gpu_prev_blurred_.empty()) { gpu_blurred_.copyTo(gpu_prev_blurred_); return; }
-        if (gpu_prev2_blurred_.empty()) { gpu_prev_blurred_.copyTo(gpu_prev2_blurred_); gpu_blurred_.copyTo(gpu_prev_blurred_); return; }
-
         if (static_mode_) {
-            // Bypass subtraction completely - look at raw intensity
             cv::cuda::threshold(gpu_blurred_, gpu_motion_, min_contrast_, 255, cv::THRESH_BINARY);
-            // FORCE Kalman to snap to the flashlight instantly
-            kf_initialized_ = false;
-        }
-        else {
-            cv::cuda::subtract(gpu_blurred_, gpu_prev2_blurred_, gpu_diff_);
+            kf_initialized_ = false; // Prevent lockout on static targets like flashlights
+        } else {
+            if (history_ring_[history_idx_].empty()) {
+                gpu_blurred_.copyTo(history_ring_[history_idx_]);
+                history_idx_ = (history_idx_ + 1) % (frame_delay_ + 1);
+                return; // Fill buffer phase
+            }
+            
+            // 1. Motion Differencing
+            cv::cuda::subtract(gpu_blurred_, history_ring_[history_idx_], gpu_diff_);
             cv::cuda::threshold(gpu_diff_, gpu_motion_, motion_threshold_, 255, cv::THRESH_BINARY);
+            // 2. Brightness Masking (Only allow moving objects that are ALSO currently bright)
+            cv::cuda::threshold(gpu_blurred_, gpu_mask_current_, min_contrast_, 255, cv::THRESH_BINARY);
+            cv::cuda::bitwise_and(gpu_motion_, gpu_mask_current_, gpu_motion_);
+
+            gpu_blurred_.copyTo(history_ring_[history_idx_]); // Overwrite oldest
+            history_idx_ = (history_idx_ + 1) % (frame_delay_ + 1);
         }
 
-        gpu_prev_blurred_.copyTo(gpu_prev2_blurred_);
-        gpu_blurred_.copyTo(gpu_prev_blurred_);
+        // Execute all morphological noise reduction and ROI masking strictly on the GPU
+        gpu_open_filter_->apply(gpu_motion_, gpu_motion_);
+        for (int i = 0; i < dilate_iters_; i++) gpu_close_filter_->apply(gpu_motion_, gpu_motion_);
+        if (!gpu_roi_mask_.empty()) cv::cuda::bitwise_and(gpu_motion_, gpu_roi_mask_, gpu_motion_);
 
         cv::Mat motion_mask;
         gpu_motion_.download(motion_mask);
 
-        for (int i = 0; i < dilate_iters_; i++) cv::dilate(motion_mask, motion_mask, dilate_kernel_);
-        cv::morphologyEx(motion_mask, motion_mask, cv::MORPH_OPEN, open_kernel_);
-
-        if (!roi_mask_.empty()) cv::bitwise_and(motion_mask, roi_mask_, motion_mask);
-
         std::vector<std::vector<cv::Point>> contours;
         cv::findContours(motion_mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-        float best_x = -1.0f, best_y = -1.0f, best_r = 0.0f, best_contrast = 0.0f;
+        float best_x = -1.0f, best_y = -1.0f, best_r = 0.0f;
+        float best_score = -1.0f;
+        float best_brightness = 0.0f;
         bool found = false;
 
         for (const auto& contour : contours) {
             cv::Rect bbox = cv::boundingRect(contour);
-            double area = bbox.width * bbox.height;
-            if (area < min_area_ || area > max_area_) continue;
+            double bbox_area = bbox.width * bbox.height;
+            if (bbox_area < min_area_ || bbox_area > max_area_) continue;
+
+            // Reject highly elongated shapes (like sweeping arms and paddles)
+            float aspect_ratio = static_cast<float>(bbox.width) / bbox.height;
+            if (aspect_ratio < 0.25f || aspect_ratio > 4.0f) continue; // Tightened to reject table edge lines
+
+            // Circularity check: Ping pong balls are round, sweeping paddle edges are jagged lines
+            double contour_area = cv::contourArea(contour);
+            double perimeter = cv::arcLength(contour, true);
+            double circularity = 1.0;
+            // Only enforce circularity on blobs large enough to have a measurable shape.
+            // Tiny distant balls (<16px area) are just pixelated squares and will fail math checks!
+            if (perimeter > 0.0 && bbox_area >= 16.0) {
+                circularity = 4.0 * CV_PI * contour_area / (perimeter * perimeter);
+                if (circularity < 0.35) continue; // Tightened to reject crescent edge noise
+            }
 
             cv::Point2f center(bbox.x + bbox.width / 2.0f, bbox.y + bbox.height / 2.0f);
             if (center.x < edge_margin_ || center.x > img.cols - edge_margin_) continue;
@@ -197,30 +238,28 @@ private:
             cv::Mat roi = img(bbox);
             cv::Mat mask_roi = motion_mask(bbox);
             double brightness = cv::mean(roi, mask_roi)[0];
-            if (brightness < min_contrast_) continue;
 
-            if (brightness > best_contrast) {
-                best_contrast = static_cast<float>(brightness);
+            // KF PROXIMITY SCORING:
+            // If we have a track, prioritize the bright blob closest to the prediction!
+            // If we don't have a track, prioritize the most circular blob.
+            float score = 0.0f;
+            if (kf_initialized_) {
+                float pred_x = kf_.statePre.at<float>(0);
+                float pred_y = kf_.statePre.at<float>(1);
+                float dist_sq = std::pow(center.x - pred_x, 2) + std::pow(center.y - pred_y, 2);
+                if (dist_sq > kf_gate_px_sq_) continue; // Ignore white lines far away from the ball
+                score = 1000.0f / (std::sqrt(dist_sq) + 1.0f); // Closer = Higher Score
+            } else {
+                score = static_cast<float>(circularity * bbox_area);
+            }
+
+            if (score > best_score) {
+                best_score = score;
                 best_x = center.x;
                 best_y = center.y;
                 best_r = std::max(bbox.width, bbox.height) / 2.0f;
+                best_brightness = static_cast<float>(brightness);
                 found = true;
-            }
-        }
-
-        // Hysteresis is skipped in static mode so it doesn't get confused
-        if (!static_mode_ && !found && kf_initialized_) {
-            int px = std::clamp((int)kf_.statePost.at<float>(0), 0, img.cols - 1);
-            int py = std::clamp((int)kf_.statePost.at<float>(1), 0, img.rows - 1);
-            cv::Rect box(
-                std::max(0, px - hysteresis_r_), std::max(0, py - hysteresis_r_),
-                std::min(2 * hysteresis_r_, img.cols - std::max(0, px - hysteresis_r_)),
-                std::min(2 * hysteresis_r_, img.rows - std::max(0, py - hysteresis_r_)));
-            double max_val; cv::Point max_loc;
-            cv::minMaxLoc(img(box), nullptr, &max_val, nullptr, &max_loc);
-            if (max_val >= hysteresis_thresh_) {
-                best_x = (float)(box.x + max_loc.x); best_y = (float)(box.y + max_loc.y);
-                best_r = 5.0f; best_contrast = (float)max_val; found = true;
             }
         }
 
@@ -239,7 +278,7 @@ private:
 
             if (found) {
                 float dx = best_x - kf_.statePre.at<float>(0), dy = best_y - kf_.statePre.at<float>(1);
-                if (static_mode_ || (dx * dx + dy * dy <= kf_gate_px_sq_)) {
+                if (dx * dx + dy * dy <= kf_gate_px_sq_) {
                     cv::Mat meas = (cv::Mat_<float>(2, 1) << best_x, best_y);
                     kf_.correct(meas);
                     miss_count_ = 0;
@@ -270,7 +309,7 @@ private:
 
         if (kf_initialized_) {
             det_msg.x = kf_.statePost.at<float>(0); det_msg.y = kf_.statePost.at<float>(1);
-            det_msg.radius = found ? best_r : 0.0f; det_msg.confidence = found ? best_contrast : 0.0f;
+            det_msg.radius = found ? best_r : 0.0f; det_msg.confidence = found ? best_brightness : 0.0f;
         }
         detection_pub_->publish(det_msg);
     }
@@ -282,8 +321,13 @@ private:
     std::vector<cv::Point> table_roi_;
     cv::Mat roi_mask_, dilate_kernel_, open_kernel_, detect_kernel_;
 
-    cv::cuda::GpuMat gpu_frame_, gpu_blurred_, gpu_prev_blurred_, gpu_prev2_blurred_, gpu_diff_, gpu_motion_;
+    cv::cuda::GpuMat gpu_frame_, gpu_blurred_, gpu_diff_, gpu_mask_current_, gpu_motion_, gpu_roi_mask_;
     cv::Ptr<cv::cuda::Filter> gaussian_filter_;
+    cv::Ptr<cv::cuda::Filter> gpu_open_filter_, gpu_close_filter_;
+
+    std::vector<cv::cuda::GpuMat> history_ring_;
+    int history_idx_ = 0;
+    int frame_delay_ = 10;
 
     int consistency_min_; std::deque<bool> consistency_buf_;
     cv::KalmanFilter kf_;

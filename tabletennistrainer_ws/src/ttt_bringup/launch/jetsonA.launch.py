@@ -38,6 +38,14 @@ def generate_launch_description():
             )
         ),
 
+        # Bridge table frame to robot_base (robot is mounted 1.6m behind net, 15cm below table)
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='table_to_robot_base',
+            arguments=['0', '-0.15', '-1.6', '0', '0', '0', 'table', 'robot_base'],
+        ),
+
         # Bridge URDF root link to TF tree (robot_base → root, identity transform)
         Node(
             package='tf2_ros',
@@ -72,7 +80,6 @@ def generate_launch_description():
                 'camera_id': 'left',
                 'min_area': PARAMS['min_area'],
                 'max_area': PARAMS['max_area'],
-                'motion_threshold': PARAMS['motion_threshold'],
                 'min_contrast': PARAMS['min_contrast'],
                 'dilate_iters': PARAMS['dilate_iters'],
                 'edge_margin': PARAMS['edge_margin'],
@@ -92,6 +99,10 @@ def generate_launch_description():
                 'cy': PARAMS['cy'],
                 'baseline_m': PARAMS['baseline_m'],
                 'max_sync_age_ms': PARAMS['max_sync_age_ms'],
+                'limit_x_m': PARAMS.get('limit_x_m', 1.5),
+                'limit_y_top_m': PARAMS.get('limit_y_top_m', 2.0),
+                'limit_y_bottom_m': PARAMS.get('limit_y_bottom_m', -0.2),
+                'limit_z_m': PARAMS.get('limit_z_m', 2.5),
             }],
         ),
 
@@ -108,7 +119,11 @@ def generate_launch_description():
                 'camera_tilt_deg': PARAMS['camera_tilt_deg'],
                 'table_y': PARAMS['table_y'],
                 'restitution': PARAMS['restitution'],
-                'net_z': PARAMS['net_z'],
+                'net_z': PARAMS.get('net_z', 0.0),
+                'min_incoming_speed': PARAMS.get('min_incoming_speed', 0.5),
+                'net_margin_z': PARAMS.get('net_margin_z', -0.2),
+                'max_track_z': PARAMS.get('max_track_z', 1.15),
+                'max_velocity': PARAMS.get('max_velocity', 25.0),
             }],
             output='screen'
         ),

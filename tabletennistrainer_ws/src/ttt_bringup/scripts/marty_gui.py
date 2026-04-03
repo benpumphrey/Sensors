@@ -26,7 +26,7 @@ for _s in _scripts:
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import CompressedImage, JointState
 from geometry_msgs.msg import PointStamped
 from ttt_msgs.msg import BallDetection
 
@@ -94,6 +94,10 @@ _HTML_PAGE = """<!DOCTYPE html>
     .btn-align{border-color:#0ff;color:#0ff;}
     .btn-vision{border-color:#ff55ff;color:#ff55ff;}
     .btn-roi{border-color:#ffaa00;color:#ffaa00;}
+    .vis-container{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin:16px auto;max-width:1100px;}
+    .vis-box{background:#111;border:1px solid #333;border-radius:8px;padding:10px;position:relative;flex:1;min-width:400px;}
+    .vis-title{color:#0ff;font-size:12px;font-weight:bold;position:absolute;top:15px;left:15px;background:#111;padding:2px 6px;border-radius:4px;border:1px solid #0ff;}
+    canvas{background:#0a0a0a;border-radius:4px;width:100%;height:350px;}
   </style>
 </head>
 <body>
@@ -101,7 +105,8 @@ _HTML_PAGE = """<!DOCTYPE html>
   <div style="text-align:center;margin-bottom:8px;">
     <button class="btn" onclick="toggleCal()" id="cal-btn">&#9654; SET ROI</button>
     <button class="btn btn-align" onclick="toggleAlign()" id="align-btn">TARGET OVERLAY: OFF</button>
-    <button class="btn btn-vision" onclick="toggleVisionMode()" id="vision-btn">TRACKING: MOTION (PLAY)</button>
+    <button class="btn btn-vision" onclick="toggleAdvConfig()" id="adv-btn">&#9881; ADVANCED CONFIG</button>
+    <button class="btn" onclick="toggleDebugPanel()" id="dbg-btn" style="border-color:#ff9999;color:#ff9999;">&#128027; TRAJECTORY LOGS</button>
     <button class="btn btn-roi" onclick="toggleRoiMask()" id="roi-toggle-btn">ROI: VISIBLE</button>
   </div>
 
@@ -136,9 +141,20 @@ _HTML_PAGE = """<!DOCTYPE html>
         <span id="net-val" style="color:#ff55ff;font-family:Consolas,monospace;font-weight:bold;display:inline-block;width:45px;">0.52m</span>
       </div>
       <div>
-        <span style="color:#fff;font-size:11px;font-weight:bold;">Min Contrast: </span>
-        <input type="range" id="contrast-slider" min="5" max="150" step="1" value="25" oninput="onAngleSlider()" style="width:120px;vertical-align:middle;">
-        <span id="contrast-val" style="color:#fff;font-family:Consolas,monospace;font-weight:bold;display:inline-block;width:35px;">25</span>
+        <span style="color:#fff;font-size:11px;font-weight:bold;">Threshold: </span>
+        <input type="range" id="contrast-slider" min="10" max="250" step="1" value="100" oninput="onAngleSlider()" style="width:120px;vertical-align:middle;">
+        <span id="contrast-val" style="color:#fff;font-family:Consolas,monospace;font-weight:bold;display:inline-block;width:35px;">100</span>
+      </div>
+      <div>
+        <span style="color:#fff;font-size:11px;font-weight:bold;">Motion Thresh: </span>
+        <input type="range" id="motion-slider" min="1" max="50" step="1" value="5" oninput="onAngleSlider()" style="width:90px;vertical-align:middle;">
+        <span id="motion-val" style="color:#fff;font-family:Consolas,monospace;font-weight:bold;display:inline-block;width:25px;">5</span>
+      </div>
+      <div>
+        <span style="color:#fff;font-size:11px;font-weight:bold;">Area (Min/Max): </span>
+        <input type="range" id="min-area-slider" min="1" max="100" step="1" value="4" oninput="onAngleSlider()" style="width:70px;vertical-align:middle;">
+        <input type="range" id="max-area-slider" min="20" max="500" step="1" value="150" oninput="onAngleSlider()" style="width:70px;vertical-align:middle;">
+        <span id="area-val" style="color:#fff;font-family:Consolas,monospace;font-weight:bold;display:inline-block;width:60px;">1-150</span>
       </div>
       <button onclick="applyAngles()" style="background:#222;color:#0ff;border:1px solid #0ff;padding:6px 16px;cursor:pointer;font-family:Consolas,monospace;border-radius:4px;font-weight:bold;">Apply to C++</button>
       <span id="angle-status" style="font-size:12px;margin-left:8px;"></span>
@@ -195,6 +211,23 @@ _HTML_PAGE = """<!DOCTYPE html>
     </div>
   </div>
 
+  <div id="adv-panel" style="display:none;background:#1a1a1a;border:1px solid #ff55ff;border-radius:8px;padding:16px;margin:12px auto 10px;max-width:1200px;">
+    <h3 style="color:#fff;margin-top:0;">Advanced Calibration Parameters</h3>
+    <p style="color:#ffaa00;font-size:12px;">Changes here are saved directly to <code>calibration.py</code>. Most fundamental parameters (like camera FPS or solver buffers) require a system restart to fully apply.</p>
+    <div id="adv-form" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;margin-bottom:16px;">
+      <!-- Populated via JS -->
+    </div>
+    <button onclick="saveAdvConfig()" class="btn btn-vision">Save to calibration.py</button>
+    <span id="adv-status" style="margin-left:10px;font-size:12px;"></span>
+  </div>
+
+  <div id="dbg-panel" style="display:none;background:#1a1a1a;border:1px solid #ff9999;border-radius:8px;padding:16px;margin:12px auto 10px;max-width:1200px;">
+    <h3 style="color:#fff;margin-top:0;">Trajectory Debug Logs</h3>
+    <p style="color:#aaa;font-size:12px;">Automatically logs 3D samples and landing predictions when a trajectory ends.</p>
+    <textarea id="dbg-textarea" style="width:100%;height:300px;background:#111;color:#0f0;font-family:monospace;border:1px solid #333;padding:10px;box-sizing:border-box;" readonly></textarea>
+    <button onclick="clearDebugLogs()" class="btn" style="margin-top:10px;border-color:#f55;color:#f55;">Clear Logs</button>
+  </div>
+
   <div class="feeds">
     <div class="feed"><h3>LEFT CAMERA (Jetson A)</h3><img id="img-left" src="/stream/left" onclick="imgClick(event,'left')" style="cursor:crosshair;"></div>
     <div class="feed"><h3>RIGHT CAMERA (Jetson B)</h3><img id="img-right" src="/stream/right" onclick="imgClick(event,'right')" style="cursor:crosshair;"></div>
@@ -219,31 +252,16 @@ _HTML_PAGE = """<!DOCTYPE html>
       </div>
     </div>
 
-    <div class="stats" style="min-width:280px;max-width:380px;">
-      <div class="hdr">COORDINATE FRAME</div>
-      <div style="font-size:10px;color:#666;text-align:center;margin-bottom:2px;">TOP VIEW</div>
-      <svg width="100%" viewBox="0 0 260 150" style="display:block;margin:0 auto 6px;">
-        <defs>
-          <marker id="arrowZ" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#5555ff"/></marker>
-          <marker id="arrowX" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#ff5555"/></marker>
-        </defs>
-        <rect x="20" y="30" width="220" height="90" rx="3" fill="#1a2a1a" stroke="#333" stroke-width="1.5"/>
-        <line x1="130" y1="30" x2="130" y2="120" stroke="#555" stroke-width="1.5" stroke-dasharray="4,3"/>
-        <text x="133" y="80" fill="#666" font-size="8" font-family="Consolas">NET</text>
-        <text x="75"  y="24" fill="#aaa" font-size="8" font-family="Consolas" text-anchor="middle">MARTY</text>
-        <text x="195" y="24" fill="#aaa" font-size="8" font-family="Consolas" text-anchor="middle">OPPONENT</text>
-        <rect x="70" y="22" width="10" height="8" rx="1" fill="#1a1a1a" stroke="#0f0" stroke-width="1.2"/>
-        <text x="75" y="19" fill="#0f0" font-size="7" font-family="Consolas" text-anchor="middle">CAM L</text>
-        <rect x="70" y="120" width="10" height="8" rx="1" fill="#1a1a1a" stroke="#0f0" stroke-width="1.2"/>
-        <text x="75" y="138" fill="#0f0" font-size="7" font-family="Consolas" text-anchor="middle">CAM R</text>
-        <line x1="75" y1="75" x2="235" y2="75" stroke="#5555ff" stroke-width="1.5" marker-end="url(#arrowZ)"/>
-        <text x="240" y="79" fill="#5555ff" font-size="11" font-family="Consolas" font-weight="bold">Z</text>
-        <line x1="75" y1="115" x2="75" y2="36" stroke="#ff5555" stroke-width="1.5" marker-end="url(#arrowX)"/>
-        <text x="67" y="34" fill="#ff5555" font-size="11" font-family="Consolas" font-weight="bold">X</text>
-        <line id="ray-l" x1="75" y1="26" x2="75" y2="26" stroke="#00ffaa" stroke-width="1.5" stroke-dasharray="5,3" opacity="0"/>
-        <line id="ray-r" x1="75" y1="124" x2="75" y2="124" stroke="#ffaa00" stroke-width="1.5" stroke-dasharray="5,3" opacity="0"/>
-        <circle id="ball-td" cx="0" cy="0" r="4" fill="#ffff00" stroke="#fff" stroke-width="1" opacity="0"/>
-      </svg>
+  </div>
+
+  <div class="vis-container">
+    <div class="vis-box">
+      <div class="vis-title">TOP VIEW (X-Z)</div>
+      <canvas id="topCanvas" width="600" height="350"></canvas>
+    </div>
+    <div class="vis-box">
+      <div class="vis-title">SIDE VIEW (Y-Z)</div>
+      <canvas id="sideCanvas" width="600" height="350"></canvas>
     </div>
   </div>
 
@@ -259,48 +277,130 @@ _HTML_PAGE = """<!DOCTYPE html>
 
   <script>
     var _panL = 15.0, _panR = 15.0, _tiltL = 45.0, _tiltR = 45.0, _hl = 0.889, _hr = 0.889, _rollL = 0.0, _rollR = 0.0, _net = 0.52;
-    var _fx = 448.2, _fy = 448.2, _cx = 320.0, _cy = 200.0, _baseline = 1.5;
-    var _SVG_Z_SCALE = 80, _SVG_X_SCALE = 65;
-    var _CAM_L = {x:75, y:26}, _CAM_R = {x:75, y:124};
-    var calOpen = false, alignOpen = false, staticMode = false;
+    var _motion = 5;
+    var _fx = 448.2, _fy = 448.2, _cx = 320.0, _cy = 200.0, _baseline = 1.525;
+    var _SVG_Z_SCALE = 80, _SVG_X_SCALE = 60;
+    var _CAM_L = {x:88, y:29}, _CAM_R = {x:88, y:121};
+    var calOpen = false, alignOpen = false, advOpen = false, dbgOpen = false;
     var calPts = {left:[], right:[]};
     var CAM_W = 640, CAM_H = 400;
     var CORNER_LABELS = ['top-left','top-right','bottom-right','bottom-left'];
 
-    function drawRaysSvg(d) {
-      var rayL = document.getElementById('ray-l');
-      var rayR = document.getElementById('ray-r');
-      var ballDot = document.getElementById('ball-td');
+    function drawVisualizations(d) {
+      const topCv = document.getElementById('topCanvas');
+      const sideCv = document.getElementById('sideCanvas');
+      if(!topCv || !sideCv) return;
+      const tCtx = topCv.getContext('2d');
+      const sCtx = sideCv.getContext('2d');
+      const w = topCv.width, h = topCv.height;
 
-      if (d.det_l_x !== null && d.det_l_x !== undefined) {
-        var u = (d.det_l_x - _cx) / _fx;
-        var panL = _panL * Math.PI / 180;
-        var dlx = u * Math.cos(panL) + Math.sin(panL);
-        var dlz = -u * Math.sin(panL) + Math.cos(panL);
-        var sx = dlz * _SVG_Z_SCALE, sy = dlx * _SVG_X_SCALE;
-        var t = 220 / Math.sqrt(sx*sx + sy*sy + 1e-9);
-        rayL.setAttribute('x1', _CAM_L.x); rayL.setAttribute('y1', _CAM_L.y);
-        rayL.setAttribute('x2', _CAM_L.x + sx*t); rayL.setAttribute('y2', _CAM_L.y + sy*t);
-        rayL.setAttribute('opacity', '0.85');
-      } else { rayL.setAttribute('opacity', '0'); }
+      tCtx.clearRect(0,0,w,h); sCtx.clearRect(0,0,w,h);
 
-      if (d.det_r_x !== null && d.det_r_x !== undefined) {
-        var ur = (d.det_r_x - _cx) / _fx;
-        var panR = -_panR * Math.PI / 180;
-        var drx = ur * Math.cos(panR) + Math.sin(panR);
-        var drz = -ur * Math.sin(panR) + Math.cos(panR);
-        var sx = drz * _SVG_Z_SCALE, sy = drx * _SVG_X_SCALE;
-        var t = 220 / Math.sqrt(sx*sx + sy*sy + 1e-9);
-        rayR.setAttribute('x1', _CAM_R.x); rayR.setAttribute('y1', _CAM_R.y);
-        rayR.setAttribute('x2', _CAM_R.x + sx*t); rayR.setAttribute('y2', _CAM_R.y + sy*t);
-        rayR.setAttribute('opacity', '0.85');
-      } else { rayR.setAttribute('opacity', '0'); }
+      // MAPPINGS:  TopView = X vs Z  |  SideView = Y vs Z
+      // Z range: -2m to +2m fits in w=600px -> Scale = 150 px/m
+      const SCALE = 130; 
+      const czTop = w/2;    // Z=0 (net) is horizontally centered
+      const cxTop = h/2;    // X=0 (table center) is vertically centered
+      const czSide = w/2;   // Z=0 (net) is horizontally centered
+      const cySide = h - 60; // Y=0 (table surface) is near the bottom
 
-      if (d.x !== null && d.x !== undefined && d.z !== null && d.z !== undefined) {
-        ballDot.setAttribute('cx', 75 + d.z * _SVG_Z_SCALE);
-        ballDot.setAttribute('cy', 26 + d.x * _SVG_X_SCALE);
-        ballDot.setAttribute('opacity', '0.9');
-      } else { ballDot.setAttribute('opacity', '0'); }
+      // Helpers
+      const T_X = (x) => cxTop + (x * SCALE);
+      const T_Z = (z) => czTop + (z * SCALE);
+      const S_Y = (y) => cySide - (y * SCALE);
+      const S_Z = (z) => czSide + (z * SCALE);
+
+      // 1. Draw Table and Net
+      tCtx.strokeStyle = '#333'; tCtx.lineWidth = 2;
+      tCtx.strokeRect(T_Z(-1.37), T_X(-0.7625), 2.74 * SCALE, 1.525 * SCALE); // Table Outline
+      tCtx.strokeStyle = '#555'; tCtx.setLineDash([5,5]);
+      tCtx.beginPath(); tCtx.moveTo(T_Z(0), T_X(-0.7625)); tCtx.lineTo(T_Z(0), T_X(0.7625)); tCtx.stroke(); // Net Top
+      tCtx.setLineDash([]);
+
+      sCtx.fillStyle = '#112211'; sCtx.fillRect(S_Z(-1.37), S_Y(0), 2.74 * SCALE, 5); // Table Top
+      sCtx.strokeStyle = '#0f0'; sCtx.lineWidth = 2;
+      sCtx.beginPath(); sCtx.moveTo(S_Z(0), S_Y(0)); sCtx.lineTo(S_Z(0), S_Y(0.1525)); sCtx.stroke(); // Net Side
+
+      // 2. Draw Ball Trail
+      if(d.trail && d.trail.length > 0) {
+        d.trail.forEach((pt, i) => {
+          let alpha = 0.2 + 0.8*(i/d.trail.length);
+          tCtx.fillStyle = `rgba(255,255,0,${alpha})`;
+          tCtx.beginPath(); tCtx.arc(T_Z(pt[2]), T_X(pt[0]), 3, 0, Math.PI*2); tCtx.fill();
+          sCtx.fillStyle = `rgba(255,255,0,${alpha})`;
+          sCtx.beginPath(); sCtx.arc(S_Z(pt[2]), S_Y(pt[1]), 3, 0, Math.PI*2); sCtx.fill();
+        });
+      }
+
+      // 3. Draw Current & Predicted Lines
+      let hasBall = (d.x !== null && d.z !== null && d.y !== null);
+      let hasPred = (d.px !== null && d.pz !== null && d.py !== null);
+      let hasLand = (d.land_x !== null && d.land_z !== null);
+
+      if(hasBall) {
+        tCtx.fillStyle = '#fff'; tCtx.beginPath(); tCtx.arc(T_Z(d.z), T_X(d.x), 5, 0, Math.PI*2); tCtx.fill();
+        sCtx.fillStyle = '#fff'; sCtx.beginPath(); sCtx.arc(S_Z(d.z), S_Y(d.y), 5, 0, Math.PI*2); sCtx.fill();
+      }
+
+      if(hasPred) {
+        tCtx.fillStyle = '#ff5555'; tCtx.beginPath(); tCtx.arc(T_Z(d.pz), T_X(d.px), 4, 0, Math.PI*2); tCtx.fill();
+        sCtx.fillStyle = '#ff5555'; sCtx.beginPath(); sCtx.arc(S_Z(d.pz), S_Y(d.py), 4, 0, Math.PI*2); sCtx.fill();
+        if(hasBall) {
+          tCtx.strokeStyle = 'rgba(255,85,85,0.5)'; tCtx.beginPath(); tCtx.moveTo(T_Z(d.z), T_X(d.x)); tCtx.lineTo(T_Z(d.pz), T_X(d.px)); tCtx.stroke();
+          sCtx.strokeStyle = 'rgba(255,85,85,0.5)'; sCtx.beginPath(); sCtx.moveTo(S_Z(d.z), S_Y(d.y)); sCtx.lineTo(S_Z(d.pz), S_Y(d.py)); sCtx.stroke();
+        }
+      }
+
+      if(hasLand) {
+        tCtx.strokeStyle = '#ffcc00'; tCtx.lineWidth=2;
+        tCtx.beginPath(); tCtx.moveTo(T_Z(d.land_z)-5, T_X(d.land_x)-5); tCtx.lineTo(T_Z(d.land_z)+5, T_X(d.land_x)+5); tCtx.stroke();
+        tCtx.beginPath(); tCtx.moveTo(T_Z(d.land_z)-5, T_X(d.land_x)+5); tCtx.lineTo(T_Z(d.land_z)+5, T_X(d.land_x)-5); tCtx.stroke();
+        
+        if(hasPred) {
+          sCtx.strokeStyle = 'rgba(255,204,0,0.5)'; sCtx.setLineDash([4,4]);
+          sCtx.beginPath(); sCtx.moveTo(S_Z(d.pz), S_Y(d.py)); sCtx.lineTo(S_Z(d.land_z), S_Y(0)); sCtx.stroke();
+          sCtx.setLineDash([]);
+        }
+      }
+
+      // 4. Draw Robot Arm (Forward Kinematics based on /joint_states)
+      let j = d.joints || {};
+      let a0 = j['BaseRotate_0'] || 0;     // Yaw
+      let a1 = j['UpperArmRotate_0'] || 0; // Pitch
+      let a2 = j['ForeArmRotate_0'] || 0;  // Pitch
+      let a3 = j['WristRotate_0'] || 0;    // Pitch
+
+      // Robot physical dimensions (approximate for viz)
+      const R_Z = -1.6; const R_X = 0; const R_Y = -0.15;
+      const L1 = 0.35, L2 = 0.45, L3 = 0.45, L4 = 0.15;
+
+      // Side View Kinematics (Y-Z Plane Projection)
+      let sy0 = R_Y, sz0 = R_Z;
+      let sy1 = sy0 + L1, sz1 = sz0;
+      let sy2 = sy1 + L2*Math.cos(a1), sz2 = sz1 + L2*Math.sin(a1);
+      let sy3 = sy2 + L3*Math.cos(a1+a2), sz3 = sz2 + L3*Math.sin(a1+a2);
+      let sy4 = sy3 + L4*Math.cos(a1+a2+a3), sz4 = sz3 + L4*Math.sin(a1+a2+a3);
+
+      sCtx.strokeStyle = '#00ffff'; sCtx.lineWidth = 4;
+      sCtx.beginPath(); sCtx.moveTo(S_Z(sz0), S_Y(sy0)); sCtx.lineTo(S_Z(sz1), S_Y(sy1)); 
+      sCtx.lineTo(S_Z(sz2), S_Y(sy2)); sCtx.lineTo(S_Z(sz3), S_Y(sy3)); sCtx.lineTo(S_Z(sz4), S_Y(sy4)); sCtx.stroke();
+      sCtx.fillStyle = '#ff00ff'; [ [sz1,sy1], [sz2,sy2], [sz3,sy3], [sz4,sy4] ].forEach(p => {
+        sCtx.beginPath(); sCtx.arc(S_Z(p[0]), S_Y(p[1]), 4, 0, Math.PI*2); sCtx.fill();
+      });
+
+      // Top View Kinematics (X-Z Plane Projection via Yaw)
+      let projL2 = L2*Math.sin(a1), projL3 = L3*Math.sin(a1+a2), projL4 = L4*Math.sin(a1+a2+a3);
+      let tz0 = R_Z, tx0 = R_X;
+      let tz1 = tz0 + projL2*Math.cos(a0), tx1 = tx0 + projL2*Math.sin(a0);
+      let tz2 = tz1 + projL3*Math.cos(a0), tx2 = tx1 + projL3*Math.sin(a0);
+      let tz3 = tz2 + projL4*Math.cos(a0), tx3 = tx2 + projL4*Math.sin(a0);
+
+      tCtx.strokeStyle = '#00ffff'; tCtx.lineWidth = 4;
+      tCtx.beginPath(); tCtx.moveTo(T_Z(tz0), T_X(tx0)); tCtx.lineTo(T_Z(tz1), T_X(tx1));
+      tCtx.lineTo(T_Z(tz2), T_X(tx2)); tCtx.lineTo(T_Z(tz3), T_X(tx3)); tCtx.stroke();
+      tCtx.fillStyle = '#ff00ff'; [ [tz0,tx0], [tz1,tx1], [tz2,tx2], [tz3,tx3] ].forEach(p => {
+        tCtx.beginPath(); tCtx.arc(T_Z(p[0]), T_X(p[1]), 4, 0, Math.PI*2); tCtx.fill();
+      });
     }
 
     function poll(){
@@ -312,7 +412,7 @@ _HTML_PAGE = """<!DOCTYPE html>
         document.getElementById('py').textContent=d.py!==null?d.py.toFixed(2):'--';
         document.getElementById('pz').textContent=d.pz!==null?d.pz.toFixed(2):'--';
         document.getElementById('land').textContent=(d.land_x!==null&&d.land_z!==null)?'Landing X: '+d.land_x.toFixed(2)+' Z: '+d.land_z.toFixed(2):'Landing: --';
-        drawRaysSvg(d);
+        drawVisualizations(d);
       }).catch(()=>{});
       setTimeout(poll,100);
     }
@@ -351,7 +451,10 @@ _HTML_PAGE = """<!DOCTYPE html>
       _rollL = cfg.roll_left_deg || 0.0;
       _rollR = cfg.roll_right_deg || 0.0;
       _net = cfg.net_dist_z || 0.52;
-      _baseline = cfg.baseline_m || 1.525;
+      _contrast = cfg.min_contrast || 100;
+      _motion = cfg.motion_threshold || 5;
+      _minArea = cfg.min_area || 1;
+      _maxArea = cfg.max_area || 150;
       _fx = cfg.fx || 448.2;
       _fy = cfg.fy || 448.2;
       _cx = cfg.cx || 320.0;
@@ -366,7 +469,10 @@ _HTML_PAGE = """<!DOCTYPE html>
       document.getElementById('roll-l-slider').value = _rollL;
       document.getElementById('roll-r-slider').value = _rollR;
       document.getElementById('net-slider').value = _net;
-      document.getElementById('contrast-slider').value = cfg.min_contrast || 25;
+      document.getElementById('contrast-slider').value = _contrast;
+      document.getElementById('motion-slider').value = _motion;
+      document.getElementById('min-area-slider').value = _minArea;
+      document.getElementById('max-area-slider').value = _maxArea;
       onAngleSlider();
     }).catch(()=>{});
 
@@ -385,12 +491,46 @@ _HTML_PAGE = """<!DOCTYPE html>
       document.getElementById('align-panel').style.display = alignOpen ? 'block' : 'none';
     }
 
-    function toggleVisionMode(){
-      staticMode = !staticMode;
-      var btn = document.getElementById('vision-btn');
-      btn.textContent = staticMode ? 'TRACKING: STATIC (CALIBRATION)' : 'TRACKING: MOTION (PLAY)';
-      btn.style.background = staticMode ? '#330033' : '#222';
-      fetch('/api/set_vision_mode', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({static_mode: staticMode})});
+    function toggleAdvConfig(){
+      advOpen = !advOpen;
+      document.getElementById('adv-panel').style.display = advOpen ? 'block' : 'none';
+      var btn = document.getElementById('adv-btn');
+      btn.style.background = advOpen ? '#330033' : '#222';
+      if(advOpen) {
+        fetch('/api/config_all').then(r=>r.json()).then(cfg=>{
+          var html = '';
+          var skip = ['table_roi_left', 'table_roi_right'];
+          var keys = Object.keys(cfg).sort();
+          keys.forEach(k => {
+            if(skip.includes(k)) return;
+            html += '<div style="display:flex;justify-content:space-between;border-bottom:1px solid #333;padding:4px 0;">' +
+                    '<label style="color:#ccc;font-size:12px;margin-top:4px;">' + k + '</label>' +
+                    '<input type="text" id="adv_cfg_' + k + '" value="' + cfg[k] + '" style="width:100px;background:#222;color:#0f0;border:1px solid #555;text-align:right;font-family:monospace;padding:2px 4px;">' +
+                    '</div>';
+          });
+          document.getElementById('adv-form').innerHTML = html;
+        });
+      }
+    }
+
+    function saveAdvConfig(){
+      var inputs = document.querySelectorAll('input[id^="adv_cfg_"]');
+      var data = {};
+      inputs.forEach(inp => { data[inp.id.replace('adv_cfg_', '')] = inp.value; });
+      var st = document.getElementById('adv-status');
+      st.textContent = 'Saving...'; st.style.color = '#ff0';
+      fetch('/api/save_config_all', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      }).then(r=>r.json()).then(res=>{
+         if(res.ok) {
+           st.textContent = 'Saved! Restart system to fully apply.';
+           st.style.color = '#0f0';
+         } else {
+           st.textContent = 'Error saving config.';
+           st.style.color = '#f55';
+         }
+      }).catch(()=>{ st.textContent='Network error'; st.style.color='#f55'; });
     }
 
     function toggleRoiMask(){
@@ -399,6 +539,28 @@ _HTML_PAGE = """<!DOCTYPE html>
         btn.textContent = d.state ? 'ROI: VISIBLE' : 'ROI: HIDDEN';
         btn.style.background = d.state ? '#222' : '#332200';
       });
+    }
+
+    function toggleDebugPanel(){
+      dbgOpen = !dbgOpen;
+      document.getElementById('dbg-panel').style.display = dbgOpen ? 'block' : 'none';
+      var btn = document.getElementById('dbg-btn');
+      btn.style.background = dbgOpen ? '#330000' : '#222';
+      if(dbgOpen) pollDebug();
+    }
+
+    function pollDebug(){
+      if(!dbgOpen) return;
+      fetch('/api/debug_logs').then(r=>r.json()).then(logs=>{
+        var ta = document.getElementById('dbg-textarea');
+        var newText = logs.join('\\n');
+        if(ta.value !== newText) { ta.value = newText; ta.scrollTop = ta.scrollHeight; }
+      }).catch(()=>{});
+      setTimeout(pollDebug, 1000);
+    }
+
+    function clearDebugLogs(){
+      fetch('/api/debug_logs', {method: 'DELETE'}).then(()=>{ document.getElementById('dbg-textarea').value = ''; });
     }
 
     function imgClick(e, side){
@@ -464,6 +626,9 @@ _HTML_PAGE = """<!DOCTYPE html>
       _rollR = parseFloat(document.getElementById('roll-r-slider').value);
       _net = parseFloat(document.getElementById('net-slider').value);
       _contrast = parseInt(document.getElementById('contrast-slider').value);
+      _motion = parseInt(document.getElementById('motion-slider').value);
+      _minArea = parseInt(document.getElementById('min-area-slider').value);
+      _maxArea = parseInt(document.getElementById('max-area-slider').value);
 
       document.getElementById('pan-l-val').textContent = _panL.toFixed(1);
       document.getElementById('pan-r-val').textContent = _panR.toFixed(1);
@@ -475,6 +640,8 @@ _HTML_PAGE = """<!DOCTYPE html>
       document.getElementById('roll-r-val').textContent = _rollR.toFixed(1);
       document.getElementById('net-val').textContent = _net.toFixed(2) + 'm';
       document.getElementById('contrast-val').textContent = _contrast;
+      document.getElementById('motion-val').textContent = _motion;
+      document.getElementById('area-val').textContent = _minArea + '-' + _maxArea;
 
       fetch('/api/preview_angles', {method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({pl:_panL, pr:_panR, tl:_tiltL, tr:_tiltR, hl:_hl, hr:_hr, rl:_rollL, rr:_rollR, nd:_net})});
@@ -484,8 +651,11 @@ _HTML_PAGE = """<!DOCTYPE html>
       var st = document.getElementById('angle-status');
       st.style.color='#ff0'; st.textContent='applying to C++...';
       _contrast = parseInt(document.getElementById('contrast-slider').value);
+      _motion = parseInt(document.getElementById('motion-slider').value);
+      _minArea = parseInt(document.getElementById('min-area-slider').value);
+      _maxArea = parseInt(document.getElementById('max-area-slider').value);
       fetch('/api/set_angles',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({pl:_panL, pr:_panR, tl:_tiltL, tr:_tiltR, hl:_hl, hr:_hr, rl:_rollL, rr:_rollR, nd:_net, contrast:_contrast})})
+        body:JSON.stringify({pl:_panL, pr:_panR, tl:_tiltL, tr:_tiltR, hl:_hl, hr:_hr, rl:_rollL, rr:_rollR, nd:_net, contrast:_contrast, motion_thresh:_motion, min_area:_minArea, max_area:_maxArea})})
         .then(r=>r.json()).then(res=>{
           if(res.ok){ st.style.color='#0f0'; st.textContent='\u2713 C++ updated!'; }
           else { st.style.color='#f55'; st.textContent='\u2717 '+(res.msg||'error'); }
@@ -519,7 +689,7 @@ def draw_alignment_overlay(frame, side, ws):
 
         # Vector from camera to world point
         dx = tx - cam_x
-        dy = ty - cam_y   # KEY FIX: relative to camera height, not absolute height
+        dy = cam_y - ty   # Camera Y points DOWN, World Y points UP
         dz = tz - cam_z
 
         p = ws.pl if side == 'left' else -ws.pr
@@ -606,11 +776,33 @@ def draw_alignment_overlay(frame, side, ws):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 50), 2, cv2.LINE_AA)
 
 
-def draw_trajectory_overlay(frame, trail, predicted, landing):
+def draw_trajectory_overlay(frame, trail, predicted, landing, side, ws):
     h, w = frame.shape[:2]
     def in_bounds(pt): return pt and 0 <= pt[0] < w and 0 <= pt[1] < h
 
-    proj = [project_3d(x, y, z) for x, y, z in trail]
+    def table_to_cam(tx, ty, tz):
+        cam_x = -(ws.baseline / 2.0) if side == 'left' else (ws.baseline / 2.0)
+        cam_y = ws.hl if side == 'left' else ws.hr
+        cam_z = -ws.net_dist
+        dx = tx - cam_x
+        dy = cam_y - ty
+        dz = tz - cam_z
+        p = ws.pl if side == 'left' else -ws.pr
+        t = ws.tl if side == 'left' else ws.tr
+        r = ws.rl if side == 'left' else ws.rr
+        x1 = dx * math.cos(p) - dz * math.sin(p)
+        z1 = dx * math.sin(p) + dz * math.cos(p)
+        y2 = dy * math.cos(t) - z1 * math.sin(t)
+        z2 = dy * math.sin(t) + z1 * math.cos(t)
+        cx = x1 * math.cos(r) - y2 * math.sin(r)
+        cy = x1 * math.sin(r) + y2 * math.cos(r)
+        return cx, cy, z2
+
+    proj = []
+    for x, y, z in trail:
+        cx, cy, cz = table_to_cam(x, y, z)
+        proj.append(project_3d(cx, cy, cz))
+
     for i, pt in enumerate(proj):
         if not in_bounds(pt): continue
         alpha = (i + 1) / len(trail)
@@ -618,18 +810,6 @@ def draw_trajectory_overlay(frame, trail, predicted, landing):
         if i > 0 and in_bounds(proj[i-1]):
             cv2.line(frame, proj[i-1], pt, (int(255 * alpha), int(180 * alpha), 0), 1)
 
-    if predicted:
-        pt = project_3d(*predicted)
-        if in_bounds(pt):
-            cv2.circle(frame, pt, 10, (0, 140, 255), 2)
-            cv2.line(frame, (pt[0]-14, pt[1]), (pt[0]+14, pt[1]), (0, 140, 255), 2)
-            cv2.line(frame, (pt[0], pt[1]-14), (pt[0], pt[1]+14), (0, 140, 255), 2)
-
-    if landing:
-        lpt = project_3d(landing[0], predicted[1] if predicted else 0.0, landing[1])
-        if in_bounds(lpt):
-            cv2.line(frame, (lpt[0]-8, lpt[1]-8), (lpt[0]+8, lpt[1]+8), (0, 255, 255), 2)
-            cv2.line(frame, (lpt[0]+8, lpt[1]-8), (lpt[0]-8, lpt[1]+8), (0, 255, 255), 2)
 
 def draw_axis_indicator(frame):
     h, w = frame.shape[:2]
@@ -644,9 +824,10 @@ def draw_axis_indicator(frame):
 class WebStreamer:
     def __init__(self):
         self._frames = {'left': None, 'right': None}
-        self._stats = {'x':None, 'y':None, 'z':None, 'px':None, 'py':None, 'pz':None, 'land_x':None, 'land_z':None,
-                       'det_l_x':None, 'det_l_y':None, 'det_r_x':None, 'det_r_y':None}
+        self._stats = {'x':None, 'y':None, 'z':None, 'px':None, 'py':None, 'pz':None, 'land_x':None, 'land_z':None, 
+                       'det_l_x':None, 'det_l_y':None, 'det_r_x':None, 'det_r_y':None, 'trail':[], 'joints':{}}
         self._topic_data = {}
+        self.traj_logs = []
 
         self.show_align = False
         self.show_roi_mask = True
@@ -698,12 +879,32 @@ class WebStreamer:
             self.show_roi_mask = not self.show_roi_mask
             return Response(json.dumps({'ok': True, 'state': self.show_roi_mask}), mimetype='application/json')
 
-        @self._app.route('/api/set_vision_mode', methods=['POST'])
-        def set_vision_mode():
-            static_mode = request.get_json().get('static_mode', False)
+        @self._app.route('/api/config_all')
+        def config_all():
+            return Response(json.dumps(CAL), mimetype='application/json')
+
+        @self._app.route('/api/save_config_all', methods=['POST'])
+        def save_config_all():
+            data = request.get_json()
+            new_data = {}
+            for k, v in data.items():
+                if k in CAL:
+                    try:
+                        if isinstance(CAL[k], int): new_data[k] = int(float(v))
+                        elif isinstance(CAL[k], float): new_data[k] = float(v)
+                        else: new_data[k] = v
+                    except: pass
+            
+            _save_all_to_cal(new_data)
+            
+            # Apply hot-swappable params immediately
             for node in ['/ball_detector_left', '/ball_detector_right']:
-                try: subprocess.run(['ros2', 'param', 'set', node, 'static_mode', str(static_mode).lower()], timeout=3)
-                except: pass
+                if 'min_contrast' in new_data: subprocess.run(['ros2', 'param', 'set', node, 'min_contrast', str(new_data['min_contrast'])], timeout=1)
+                if 'motion_threshold' in new_data: subprocess.run(['ros2', 'param', 'set', node, 'motion_threshold', str(new_data['motion_threshold'])], timeout=1)
+                if 'min_area' in new_data: subprocess.run(['ros2', 'param', 'set', node, 'min_area', str(new_data['min_area'])], timeout=1)
+                if 'max_area' in new_data: subprocess.run(['ros2', 'param', 'set', node, 'max_area', str(new_data['max_area'])], timeout=1)
+                if 'edge_margin' in new_data: subprocess.run(['ros2', 'param', 'set', node, 'edge_margin', str(new_data['edge_margin'])], timeout=1)
+            
             return Response(json.dumps({'ok':True}), mimetype='application/json')
 
         @self._app.route('/api/set_roi', methods=['POST'])
@@ -733,6 +934,13 @@ class WebStreamer:
             ok = result.returncode == 0
             return Response(json.dumps({'ok': ok, 'z': z, 'msg': result.stdout.strip() or result.stderr.strip()}), mimetype='application/json')
 
+        @self._app.route('/api/debug_logs', methods=['GET', 'DELETE'])
+        def debug_logs():
+            if request.method == 'DELETE':
+                self.traj_logs.clear()
+                return Response(json.dumps({'ok': True}), mimetype='application/json')
+            return Response(json.dumps(self.traj_logs), mimetype='application/json')
+
         @self._app.route('/api/config')
         def config():
             # MERGED: also expose intrinsics so JS ray-drawing uses real values
@@ -746,7 +954,10 @@ class WebStreamer:
                 'roll_left_deg':  CAL.get('roll_left_deg', 0.0),
                 'roll_right_deg': CAL.get('roll_right_deg', 0.0),
                 'net_dist_z':     CAL.get('net_dist_z', 0.52),
-                'min_contrast':   CAL.get('min_contrast', 25),
+                'min_contrast':   CAL.get('min_contrast', 100),
+                'motion_threshold': CAL.get('motion_threshold', 5),
+                'min_area':       CAL.get('min_area', 1),
+                'max_area':       CAL.get('max_area', 150),
                 'baseline_m':     CAL.get('baseline_m', 1.525),
                 'fx':             CAL.get('fx', 448.2),
                 'fy':             CAL.get('fy', 448.2),
@@ -780,7 +991,10 @@ class WebStreamer:
             rl = float(data.get('rl', CAL.get('roll_left_deg', 0.0)))
             rr = float(data.get('rr', CAL.get('roll_right_deg', 0.0)))
             nd = float(data.get('nd', CAL.get('net_dist_z', 0.52)))
-            contrast = int(data.get('contrast', CAL.get('min_contrast', 25)))
+            contrast = int(data.get('contrast', CAL.get('min_contrast', 100)))
+            motion = int(data.get('motion_thresh', CAL.get('motion_threshold', 5)))
+            min_area = int(data.get('min_area', CAL.get('min_area', 1)))
+            max_area = int(data.get('max_area', CAL.get('max_area', 150)))
 
             msgs = []
             ok = True
@@ -802,16 +1016,21 @@ class WebStreamer:
                     subprocess.run(['ros2', 'param', 'set', '/stereo_node', param, str(val)], timeout=3)
                 except: pass
 
-            # Contrast to vision nodes
+            # Contrast, Motion, and Area to vision nodes
             for node in ['/ball_detector_left', '/ball_detector_right']:
                 try: subprocess.run(['ros2', 'param', 'set', node, 'min_contrast', str(contrast)], timeout=3)
                 except: pass
+                try: subprocess.run(['ros2', 'param', 'set', node, 'motion_threshold', str(motion)], timeout=3)
+                except: pass
+                try: subprocess.run(['ros2', 'param', 'set', node, 'min_area', str(min_area)], timeout=3)
+                except: pass
+                try: subprocess.run(['ros2', 'param', 'set', node, 'max_area', str(max_area)], timeout=3)
+                except: pass
 
             # Tilt and height to trajectory node
-            avg_tilt = (tl + tr) / 2.0
-            try: subprocess.run(['ros2', 'param', 'set', '/trajectory_node', 'camera_tilt_deg', str(avg_tilt)], timeout=3)
+            try: subprocess.run(['ros2', 'param', 'set', '/trajectory_node', 'camera_tilt_deg', "0.0"], timeout=3)
             except: pass
-            try: subprocess.run(['ros2', 'param', 'set', '/trajectory_node', 'table_y', str(avg_height)], timeout=3)
+            try: subprocess.run(['ros2', 'param', 'set', '/trajectory_node', 'table_y', "0.0"], timeout=3)
             except: pass
 
             # MERGED: use unified _save_all_to_cal
@@ -821,7 +1040,8 @@ class WebStreamer:
                     'tilt_left_deg': tl, 'tilt_right_deg': tr,
                     'height_left': hl, 'height_right': hr,
                     'roll_left_deg': rl, 'roll_right_deg': rr,
-                    'net_dist_z': nd, 'min_contrast': contrast,
+                    'net_dist_z': nd, 'min_contrast': contrast, 'motion_threshold': motion,
+                    'min_area': min_area, 'max_area': max_area,
                 })
             return Response(json.dumps({'ok': ok, 'msg': '; '.join(msgs) or 'ok'}), mimetype='application/json')
 
@@ -837,31 +1057,67 @@ class SystemLauncher(threading.Thread):
         subprocess.run("bash /home/capstone-nano2/Sensors/tabletennistrainer_ws/sync_and_build.sh", shell=True)
         print("✅ Workspace synced! Launching ROS 2 nodes...")
 
-        _roi_b = (' -p table_roi:="[' + ','.join(str(v) for v in CAL['table_roi_right']) + ']"') if CAL['table_roi_right'] else ''
+        # --- RIGHT CAMERA LAUNCH COMMAND (Jetson B - Local) ---
+        _roi_b = (' -p table_roi:="[' + ','.join(str(v) for v in CAL['table_roi_right']) + ']"') if CAL.get('table_roi_right') else ''
         cmd_b = (
             "export ROS_DOMAIN_ID=42; export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp; export CYCLONEDDS_URI=file:///tmp/cyc_b.xml\n"
+            "export RCUTILS_CONSOLE_OUTPUT_FORMAT=\"[{severity}] [{name}]: {message}\"\n"
             "source /opt/ros/humble/setup.bash && source /home/capstone-nano2/Sensors/tabletennistrainer_ws/install/setup.bash\n"
             "ros2 launch ttt_bringup camera_right.launch.py &\n"
-            f"ros2 run ttt_vision vision_node --ros-args -r __node:=ball_detector_right -p camera_id:=right -p min_area:={CAL['min_area']} -p max_area:={CAL['max_area']} -p motion_threshold:={CAL['motion_threshold']} -p min_contrast:={CAL.get('min_contrast', 25)} -p dilate_iters:={CAL['dilate_iters']} -p edge_margin:={CAL['edge_margin']} {_roi_b} &\n"
+            f"ros2 run ttt_vision vision_node --ros-args -r __node:=ball_detector_right -p camera_id:=right -p min_area:={CAL['min_area']} -p max_area:={CAL['max_area']} -p motion_threshold:={CAL['motion_threshold']} -p min_contrast:={CAL.get('min_contrast', 100)} -p dilate_iters:={CAL['dilate_iters']} -p edge_margin:={CAL['edge_margin']} {_roi_b} &\n"
             "wait"
         )
         with open('/tmp/lb.sh', 'w') as f: f.write(cmd_b)
         subprocess.Popen("bash /tmp/lb.sh", shell=True)
 
-        _roi_a = (' -p table_roi:="[' + ','.join(str(v) for v in CAL['table_roi_left']) + ']"') if CAL['table_roi_left'] else ''
+        # --- LEFT CAMERA + STEREO + TRAJECTORY LAUNCH COMMAND (Jetson A - Remote) ---
+        _roi_a = (' -p table_roi:="[' + ','.join(str(v) for v in CAL['table_roi_left']) + ']"') if CAL.get('table_roi_left') else ''
+        
+        # Calculate the averaged Origin Shifts
+        avg_height = (CAL.get('height_left', 0.889) + CAL.get('height_right', 0.889)) / 2.0
+        net_dist = CAL.get('net_dist_z', 0.52)
+
         cmd_a = (
             "echo \"<?xml version='1.0' encoding='UTF-8' ?><CycloneDDS xmlns='https://cdds.io/config'><Domain id='any'><General><Interfaces><NetworkInterface address='192.168.1.10'/></Interfaces></General></Domain></CycloneDDS>\" > /tmp/cyc_a.xml\n"
             "export ROS_DOMAIN_ID=42; export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp; export CYCLONEDDS_URI=file:///tmp/cyc_a.xml\n"
+            "export RCUTILS_CONSOLE_OUTPUT_FORMAT=\"[{severity}] [{name}]: {message}\"\n"
             f"v4l2-ctl -d /dev/video0 -c auto_exposure=1 -c exposure={CAL['exposure']} -c analogue_gain={CAL['analogue_gain']}\n"
             "source /opt/ros/humble/setup.bash && source /home/capstone-nano1/Sensors/tabletennistrainer_ws/install/setup.bash\n"
-            "ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 robot_base root --ros-args -r __node:=robot_base_to_root &\n"
-            "ros2 run ttt_calibration tf_broadcaster_node --ros-args --params-file /home/capstone-nano1/Sensors/tabletennistrainer_ws/src/ttt_calibration/config/stereo_extrinsic.yaml &\n"
             "ros2 launch ttt_bringup camera_left.launch.py &\n"
-            f"ros2 run ttt_vision vision_node --ros-args -r __node:=ball_detector_left -p camera_id:=left -p min_area:={CAL['min_area']} -p max_area:={CAL['max_area']} -p motion_threshold:={CAL['motion_threshold']} -p min_contrast:={CAL.get('min_contrast', 25)} -p dilate_iters:={CAL['dilate_iters']} -p edge_margin:={CAL['edge_margin']} {_roi_a} &\n"
-            f"ros2 run ttt_stereo stereo_node --ros-args -p fx:={CAL['fx']} -p fy:={CAL['fy']} -p cx:={CAL['cx']} -p cy:={CAL['cy']} -p baseline_m:={CAL.get('baseline_m', 1.525)} -p max_sync_age_ms:={CAL['max_sync_age_ms']} -p pan_left_deg:={CAL.get('pan_left_deg', 15.0)} -p pan_right_deg:={CAL.get('pan_right_deg', 15.0)} -p tilt_left_deg:={CAL.get('tilt_left_deg', 45.0)} -p tilt_right_deg:={CAL.get('tilt_right_deg', 45.0)} -p roll_left_deg:={CAL.get('roll_left_deg', 0.0)} -p roll_right_deg:={CAL.get('roll_right_deg', 0.0)} &\n"
-            f"ros2 run ttt_trajectory trajectory_node --ros-args -p lookahead_ms:={CAL['lookahead_ms']} -p min_samples:={CAL['min_samples']} -p max_samples:={CAL['max_samples']} -p gravity:={CAL['gravity']} -p camera_tilt_deg:={(CAL.get('tilt_left_deg', 45.0) + CAL.get('tilt_right_deg', 45.0)) / 2.0} -p table_y:={(CAL.get('height_left', 0.889) + CAL.get('height_right', 0.889)) / 2.0} -p restitution:={CAL['restitution']} -p net_z:={CAL['net_z']} &\n"
+            
+            # Vision Node
+            f"ros2 run ttt_vision vision_node --ros-args -r __node:=ball_detector_left -p camera_id:=left -p min_area:={CAL['min_area']} -p max_area:={CAL['max_area']} -p motion_threshold:={CAL['motion_threshold']} -p min_contrast:={CAL.get('min_contrast', 100)} -p dilate_iters:={CAL['dilate_iters']} -p edge_margin:={CAL['edge_margin']} {_roi_a} &\n"
+            
+            # Stereo Node (With all alignment parameters)
+            f"ros2 run ttt_stereo stereo_node --ros-args -p fx:={CAL['fx']} -p fy:={CAL['fy']} -p cx:={CAL['cx']} -p cy:={CAL['cy']} -p baseline_m:={CAL.get('baseline_m', 1.525)} -p max_sync_age_ms:={CAL['max_sync_age_ms']} "
+            f"-p pan_left_deg:={CAL.get('pan_left_deg', 15.0)} -p pan_right_deg:={CAL.get('pan_right_deg', 15.0)} "
+            f"-p tilt_left_deg:={CAL.get('tilt_left_deg', 45.0)} -p tilt_right_deg:={CAL.get('tilt_right_deg', 45.0)} "
+            f"-p roll_left_deg:={CAL.get('roll_left_deg', 0.0)} -p roll_right_deg:={CAL.get('roll_right_deg', 0.0)} "
+            f"-p height_m:={avg_height} -p net_dist_m:={net_dist} "
+            f"-p limit_x_m:={CAL.get('limit_x_m', 1.5)} -p limit_y_top_m:={CAL.get('limit_y_top_m', 2.0)} -p limit_y_bottom_m:={CAL.get('limit_y_bottom_m', -0.2)} -p limit_z_m:={CAL.get('limit_z_m', 2.5)} &\n"
+            
+            # Robust Trajectory Node
+            f"ros2 run ttt_trajectory trajectory_node --ros-args -p lookahead_ms:={CAL['lookahead_ms']} -p min_samples:={CAL['min_samples']} -p max_samples:={CAL['max_samples']} "
+            f"-p gravity:={CAL['gravity']} -p restitution:={CAL['restitution']} "
+            f"-p min_incoming_speed:={CAL.get('min_incoming_speed', 0.5)} "
+            f"-p net_margin_z:={CAL.get('net_margin_z', -0.2)} "
+            f"-p max_track_z:={CAL.get('max_track_z', 1.15)} "
+            f"-p max_velocity:={CAL.get('max_velocity', 25.0)} "
+            f"-p camera_tilt_deg:=0.0 -p table_y:=0.0 &\n"
+            
+            # TF Tree, MoveIt, Control, and Hardware Stack
+            "ros2 launch ttt_calibration calibration.launch.py &\n"
+            "ros2 launch ttt_control rsp.launch.py &\n"
+            "ros2 launch ttt_control move_group.launch.py &\n"
+            "ros2 launch ttt_control controllers.launch.py &\n"
+            "ros2 run tf2_ros static_transform_publisher 0 -0.15 -1.6 0 0 0 table robot_base &\n"
+            "ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 robot_base root &\n"
+            "ros2 run ttt_control control_node &\n"
+            "ros2 run ttt_hardware hardware_node --ros-args -p stm_ip:=192.168.1.100 -p stm_port:=5000 -p joint_topic:=/joint_states &\n"
+            
             "wait\n"
         )
+        
         with open('/tmp/la.sh', 'w') as f: f.write(cmd_a)
         subprocess.run("scp /tmp/la.sh capstone-nano1@192.168.1.10:/tmp/la.sh", shell=True, stderr=subprocess.DEVNULL)
         subprocess.Popen("ssh -tt capstone-nano1@192.168.1.10 'bash /tmp/la.sh'", shell=True)
@@ -891,10 +1147,16 @@ class ROSWorker(threading.Thread):
     def __init__(self, ws):
         super().__init__(); self.daemon = True; self.ws = ws
         self.trail = deque(maxlen=25); self.pred = None; self.land = None; self.dets = {'left':None, 'right':None}
+        self.last_3d_time = 0.0
         self._cam_count = {'left': 0, 'right': 0}; self._cam_t0 = {}; self._cam_fps = {'left': 0.0, 'right': 0.0}
 
     def _rec(self, topic, typ, values):
         self.ws._topic_data[topic] = {'type': typ, 'last_t': time.time(), 'values': values}
+
+    def cb_joints(self, msg):
+        # Update live dictionary with the latest joint angles
+        for i, name in enumerate(msg.name):
+            self.ws._stats['joints'][name] = msg.position[i]
 
     def run(self):
         rclpy.init()
@@ -905,20 +1167,46 @@ class ROSWorker(threading.Thread):
         self.n.create_subscription(PointStamped, '/ball_position_3d', self.cb_3d, q)
         self.n.create_subscription(PointStamped, '/ball_trajectory/predicted', self.cb_pred, q)
         self.n.create_subscription(PointStamped, '/ball_trajectory/landing', self.cb_land, q)
+        self.n.create_subscription(JointState, '/joint_states', self.cb_joints, q)
         self.n.create_subscription(BallDetection, '/ball_detection/left',
             lambda m: (self.dets.update({'left': m}),
                        self.ws._stats.update({'det_l_x': m.x if m.x >= 0 else None, 'det_l_y': m.y if m.x >= 0 else None}),
-                       self._rec('/ball_detection/left', 'BallDetection', {'x': round(m.x, 1), 'y': round(m.y, 1), 'radius': round(getattr(m, 'radius', 0.0), 1), 'conf': round(getattr(m, 'confidence', 0.0), 3)})), q)
+                       self._rec('/ball_detection/left', 'BallDetection', {'x': round(m.x, 1), 'y': round(m.y, 1), 'radius': round(getattr(m, 'radius', 0.0), 1), 'area': int((getattr(m, 'radius', 0.0)*2)**2), 'conf': round(getattr(m, 'confidence', 0.0), 3)})), q)
         self.n.create_subscription(BallDetection, '/ball_detection/right',
             lambda m: (self.dets.update({'right': m}),
                        self.ws._stats.update({'det_r_x': m.x if m.x >= 0 else None, 'det_r_y': m.y if m.x >= 0 else None}),
-                       self._rec('/ball_detection/right', 'BallDetection', {'x': round(m.x, 1), 'y': round(m.y, 1), 'radius': round(getattr(m, 'radius', 0.0), 1), 'conf': round(getattr(m, 'confidence', 0.0), 3)})), q)
+                       self._rec('/ball_detection/right', 'BallDetection', {'x': round(m.x, 1), 'y': round(m.y, 1), 'radius': round(getattr(m, 'radius', 0.0), 1), 'area': int((getattr(m, 'radius', 0.0)*2)**2), 'conf': round(getattr(m, 'confidence', 0.0), 3)})), q)
         rclpy.spin(self.n)
 
     def cb_3d(self, m):
-        self.trail.append((m.point.x, m.point.y, m.point.z))
-        self.ws._stats.update({'x': m.point.x, 'y': m.point.y, 'z': m.point.z})
+        now = time.time()
+        
+        # 1. Continuity clear (mimicking trajectory_node >200ms gap)
+        if now - self.last_3d_time > 0.2:
+            self._archive_trajectory()
+            self.trail.clear()
+            self.pred = None
+            self.land = None
+            self.ws._stats.update({'px': None, 'py': None, 'pz': None, 'land_x': None, 'land_z': None})
+            
+        # 2. Bounce clear (mimicking trajectory_node bounce logic)
+        if m.point.z > 0.0 and m.point.y < 0.05:
+            self._archive_trajectory()
+            self.trail.clear()
+            
+        self.last_3d_time = now
+        self.trail.append((round(m.point.x, 3), round(m.point.y, 3), round(m.point.z, 3)))
+        
+        self.ws._stats.update({'x': m.point.x, 'y': m.point.y, 'z': m.point.z, 'trail': list(self.trail)})
         self._rec('/ball_position_3d', 'PointStamped', {'x': round(m.point.x, 3), 'y': round(m.point.y, 3), 'z': round(m.point.z, 3)})
+
+    def _archive_trajectory(self):
+        if len(self.trail) >= 4 and self.land is not None:
+            log_str = "--- TRAJECTORY INTERCEPT ---\n"
+            log_str += f"Samples ({len(self.trail)}): {list(self.trail)}\n"
+            log_str += f"Landing Calc: X={self.land[0]:.3f}, Z={self.land[1]:.3f}\n"
+            self.ws.traj_logs.append(log_str)
+            if len(self.ws.traj_logs) > 20: self.ws.traj_logs.pop(0)
 
     def cb_pred(self, m):
         self.pred = (m.point.x, m.point.y, m.point.z)
@@ -958,7 +1246,9 @@ class ROSWorker(threading.Thread):
                 h, w = frame.shape[:2]
                 bx, by = max(0, min(cx, w - 1)), max(0, min(cy, h - 1))
                 brightness = int(frame[by, bx, 0])
-                label = f"r={getattr(det, 'radius', 0.0):.1f} circ={getattr(det, 'confidence', 0.0):.2f} bright={brightness}"
+                r = getattr(det, 'radius', 0.0)
+                area_approx = int((r * 2) ** 2)
+                label = f"r={r:.1f} area~{area_approx} contrast={getattr(det, 'confidence', 0.0):.0f} bright={brightness}"
                 label_y = max(cy - draw_r - 8, 14)
                 cv2.putText(frame, label, (cx - 80, label_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
 
@@ -966,7 +1256,7 @@ class ROSWorker(threading.Thread):
                 if sx is not None and sy is not None and sz is not None:
                     cv2.putText(frame, f"X:{sx:+.2f} Y:{sy:+.2f} Z:{sz:.2f}m", (cx - 80, label_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (100, 255, 100), 1, cv2.LINE_AA)
 
-            if side == 'left': draw_trajectory_overlay(frame, self.trail, self.pred, self.land)
+            if side == 'left': draw_trajectory_overlay(frame, self.trail, self.pred, self.land, side, self.ws)
             draw_axis_indicator(frame)
             self.ws.push_frame(frame, side)
 

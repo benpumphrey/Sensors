@@ -33,7 +33,6 @@ def generate_launch_description():
                 'camera_id': 'right',
                 'min_area': PARAMS['min_area'],
                 'max_area': PARAMS['max_area'],
-                'motion_threshold': PARAMS['motion_threshold'],
                 'min_contrast': PARAMS['min_contrast'],
                 'dilate_iters': PARAMS['dilate_iters'],
                 'edge_margin': PARAMS['edge_margin'],

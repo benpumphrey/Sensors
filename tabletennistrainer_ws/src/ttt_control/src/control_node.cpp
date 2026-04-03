@@ -59,7 +59,11 @@ public:
                     target = latest_target_;
                 }
 
-                move_group_->setPoseTarget(target);
+                // Only constrain the XYZ position! This removes the strict orientation lock,
+                // allowing MoveIt to freely rotate the wrist to successfully reach the ball!
+                move_group_->setPositionTarget(target.position.x, target.position.y, target.position.z);
+                move_group_->setGoalPositionTolerance(0.04); // Allow 4cm of wiggle room to guarantee an IK solution
+                
                 moveit::planning_interface::MoveGroupInterface::Plan plan;
 
                 auto result = move_group_->plan(plan);
