@@ -207,8 +207,8 @@ private:
         if (landing.has_value()) {
             
             // 5. LANDING BOUNDS CHECK: Reject trajectories that land in another timezone
-            // (Table width is +/-0.76m. If it lands > 3m left/right or > 4m deep, it's a bad fit)
-            if (std::abs(landing->x) > 3.0 || landing->z < -4.0 || landing->z > 2.0) {
+            // (Table width is +/-0.76m. Robot base is at Z=-1.4732m. If it lands behind the robot or way off side, ignore it)
+            if (std::abs(landing->x) > 1.5 || landing->z < -1.48 || landing->z > 2.0) {
                 return;
             }
 
@@ -219,11 +219,12 @@ private:
                 double t_intercept = landing->t_land + (lookahead_ms_ / 1000.0);
                 auto [px, py, pz, bounced] = predictWithBounce(x0, vx, y0, vy, z0, vz, t_now, t_intercept);
 
-                if (!has_prev_pred_) {
+                // If it's a new prediction OR the jump is huge (ghost), snap to it immediately
+                if (!has_prev_pred_ || std::abs(px - smooth_px_) > 1.0) {
                     smooth_px_ = px; smooth_py_ = py; smooth_pz_ = pz;
                     has_prev_pred_ = true;
                 } else {
-                    double a = 0.15; // Exponential moving average smooths jumping paths
+                    double a = 0.4; // Increased from 0.15 so it tracks faster and stops lagging behind
                     smooth_px_ = a * px + (1.0 - a) * smooth_px_;
                     smooth_py_ = a * py + (1.0 - a) * smooth_py_;
                     smooth_pz_ = a * pz + (1.0 - a) * smooth_pz_;

@@ -93,6 +93,7 @@ _HTML_PAGE = """<!DOCTYPE html>
     .btn:hover{background:#333;}
     .btn-align{border-color:#0ff;color:#0ff;}
     .btn-vision{border-color:#ff55ff;color:#ff55ff;}
+    .btn-test{border-color:#00ffaa;color:#00ffaa;}
     .btn-roi{border-color:#ffaa00;color:#ffaa00;}
     .vis-container{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin:16px auto;max-width:1100px;}
     .vis-box{background:#111;border:1px solid #333;border-radius:8px;padding:10px;position:relative;flex:1;min-width:400px;}
@@ -108,6 +109,13 @@ _HTML_PAGE = """<!DOCTYPE html>
     <button class="btn btn-vision" onclick="toggleAdvConfig()" id="adv-btn">&#9881; ADVANCED CONFIG</button>
     <button class="btn" onclick="toggleDebugPanel()" id="dbg-btn" style="border-color:#ff9999;color:#ff9999;">&#128027; TRAJECTORY LOGS</button>
     <button class="btn btn-roi" onclick="toggleRoiMask()" id="roi-toggle-btn">ROI: VISIBLE</button>
+  </div>
+
+  <div style="text-align:center;margin-bottom:12px;background:#111;padding:8px;border-radius:6px;border:1px solid #333;display:inline-block;position:relative;left:50%;transform:translateX(-50%);">
+    <span style="color:#aaa;font-size:12px;margin-right:10px;font-weight:bold;">HARDWARE TEST:</span>
+    <button class="btn btn-test" onclick="testArm(-0.4)">SWING LEFT</button>
+    <button class="btn btn-test" onclick="testArm(0.0)">SWING CENTER</button>
+    <button class="btn btn-test" onclick="testArm(0.4)">SWING RIGHT</button>
   </div>
 
   <div id="cal-panel" style="display:none;background:#1a1a1a;border:1px solid #0f0;border-radius:8px;padding:14px;margin:0 auto 10px;max-width:1200px;font-size:12px;">
@@ -371,7 +379,7 @@ _HTML_PAGE = """<!DOCTYPE html>
       let a3 = j['WristRotate_0'] || 0;    // Pitch
 
       // Robot physical dimensions (approximate for viz)
-      const R_Z = -1.6; const R_X = 0; const R_Y = -0.15;
+      const R_Z = -1.4732; const R_X = 0; const R_Y = 0.0;
       const L1 = 0.35, L2 = 0.45, L3 = 0.45, L4 = 0.15;
 
       // Side View Kinematics (Y-Z Plane Projection)
@@ -661,6 +669,11 @@ _HTML_PAGE = """<!DOCTYPE html>
           else { st.style.color='#f55'; st.textContent='\u2717 '+(res.msg||'error'); }
         }).catch(()=>{ st.style.color='#f55'; st.textContent='\u2717 error'; });
     }
+
+function testArm(x_val){
+  fetch('/api/test_arm', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({x: x_val})});
+}
   </script>
 </body>
 </html>"""
@@ -1045,6 +1058,18 @@ class WebStreamer:
                 })
             return Response(json.dumps({'ok': ok, 'msg': '; '.join(msgs) or 'ok'}), mimetype='application/json')
 
+        @self._app.route('/api/test_arm', methods=['POST'])
+        def api_test_arm():
+            data = request.get_json()
+            msg = PointStamped()
+            if hasattr(self, 'ros_worker'): msg.header.stamp = self.ros_worker.n.get_clock().now().to_msg()
+            msg.header.frame_id = 'table'
+            msg.point.x = float(data.get('x', 0.0))
+            msg.point.y = 0.15
+            msg.point.z = -0.80
+            if hasattr(self, 'ros_worker'): self.ros_worker.test_pub.publish(msg)
+            return Response(json.dumps({'ok': True}), mimetype='application/json')
+
     def push_frame(self, f, s):
         _, j = cv2.imencode('.jpg', f, [cv2.IMWRITE_JPEG_QUALITY, 70])
         self._frames[s] = j.tobytes()
@@ -1110,7 +1135,7 @@ class SystemLauncher(threading.Thread):
             "ros2 launch ttt_control rsp.launch.py &\n"
             "ros2 launch ttt_control move_group.launch.py &\n"
             "ros2 launch ttt_control controllers.launch.py &\n"
-            "ros2 run tf2_ros static_transform_publisher 0 -0.15 -1.6 0 0 0 table robot_base &\n"
+            "ros2 run tf2_ros static_transform_publisher 0 0 -1.4732 0 0 0 table robot_base &\n"
             "ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 robot_base root &\n"
             "ros2 run ttt_control control_node &\n"
             "ros2 run ttt_hardware hardware_node --ros-args -p stm_ip:=192.168.1.100 -p stm_port:=5000 -p joint_topic:=/joint_states &\n"
@@ -1121,27 +1146,6 @@ class SystemLauncher(threading.Thread):
         with open('/tmp/la.sh', 'w') as f: f.write(cmd_a)
         subprocess.run("scp /tmp/la.sh capstone-nano1@192.168.1.10:/tmp/la.sh", shell=True, stderr=subprocess.DEVNULL)
         subprocess.Popen("ssh -tt capstone-nano1@192.168.1.10 'bash /tmp/la.sh'", shell=True)
-
-class RoiPoller(threading.Thread):
-    def __init__(self):
-        super().__init__(); self.daemon = True
-        self.rois = {'left': [], 'right': []}
-
-    def run(self):
-        import re
-        nodes = {'left': '/ball_detector_left', 'right': '/ball_detector_right'}
-        while True:
-            for side, node in nodes.items():
-                try:
-                    result = subprocess.run(['ros2', 'param', 'get', node, 'table_roi'], capture_output=True, text=True, timeout=3)
-                    m = re.search(r'\[([0-9,\s]+)\]', result.stdout)
-                    if m:
-                        vals = list(map(int, m.group(1).split(',')))
-                        if len(vals) >= 8: self.rois[side] = [(vals[i*2], vals[i*2+1]) for i in range(len(vals)//2)]
-                except Exception: pass
-            time.sleep(5)
-
-_roi_poller = RoiPoller()
 
 class ROSWorker(threading.Thread):
     def __init__(self, ws):
@@ -1176,6 +1180,7 @@ class ROSWorker(threading.Thread):
             lambda m: (self.dets.update({'right': m}),
                        self.ws._stats.update({'det_r_x': m.x if m.x >= 0 else None, 'det_r_y': m.y if m.x >= 0 else None}),
                        self._rec('/ball_detection/right', 'BallDetection', {'x': round(m.x, 1), 'y': round(m.y, 1), 'radius': round(getattr(m, 'radius', 0.0), 1), 'area': int((getattr(m, 'radius', 0.0)*2)**2), 'conf': round(getattr(m, 'confidence', 0.0), 3)})), q)
+        self.test_pub = self.n.create_publisher(PointStamped, '/ball_trajectory/predicted', 10)
         rclpy.spin(self.n)
 
     def cb_3d(self, m):
@@ -1233,9 +1238,9 @@ class ROSWorker(threading.Thread):
             if self.ws.show_align: draw_alignment_overlay(frame, side, self.ws)
 
             if self.ws.show_roi_mask:
-                roi = _roi_poller.rois.get(side, [])
-                if roi:
-                    pts = np.array(roi, dtype=np.int32)
+                roi_pts = CAL.get(f'table_roi_{side}', [])
+                if roi_pts and len(roi_pts) == 8:
+                    pts = np.array([(roi_pts[i*2], roi_pts[i*2+1]) for i in range(4)], dtype=np.int32)
                     cv2.polylines(frame, [pts], True, (0, 200, 0), 2)
 
             det = self.dets.get(side)
@@ -1272,8 +1277,9 @@ if __name__ == "__main__":
     streamer = WebStreamer()
     streamer.start()
     SystemLauncher().start()
-    _roi_poller.start()
-    ROSWorker(streamer).start()
+    worker = ROSWorker(streamer)
+    streamer.ros_worker = worker
+    worker.start()
 
     print("=======================================\n✅ FULL VISION & TELEMETRY ONLINE\nVIEW AT: http://192.168.55.1:5000\n=======================================")
     try:

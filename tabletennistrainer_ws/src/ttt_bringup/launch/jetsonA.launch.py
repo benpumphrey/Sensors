@@ -38,12 +38,12 @@ def generate_launch_description():
             )
         ),
 
-        # Bridge table frame to robot_base (robot is mounted 1.6m behind net, 15cm below table)
+        # Bridge table frame to robot_base (robot is mounted 1.4732m behind net, level with table)
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
             name='table_to_robot_base',
-            arguments=['0', '-0.15', '-1.6', '0', '0', '0', 'table', 'robot_base'],
+            arguments=['0', '0', '-1.4732', '0', '0', '0', 'table', 'robot_base'],
         ),
 
         # Bridge URDF root link to TF tree (robot_base → root, identity transform)
