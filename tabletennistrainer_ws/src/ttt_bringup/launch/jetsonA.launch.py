@@ -140,6 +140,7 @@ def generate_launch_description():
                 'update_rate_hz':  PARAMS['update_rate_hz'],
                 'planning_time_s': PARAMS['planning_time_s'],
                 'return_delay_ms': PARAMS['return_delay_ms'],
+                'speed_multiplier': PARAMS.get('speed_multiplier', 4.0),
             }],
             output='screen'
         ),
