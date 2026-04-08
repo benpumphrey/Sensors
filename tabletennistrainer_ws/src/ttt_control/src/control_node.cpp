@@ -175,7 +175,7 @@ private:
             // planning frame 'world' via the fixed virtual joint — identity transform).
             // 'world' is not published to TF by move_group for fixed virtual joints,
             // so we use 'root' which is always present in the TF tree.
-            tf_buffer_->transform(*msg, in_base, "root",
+            tf_buffer_->transform(rep103_msg, in_base, "root",
                 tf2::durationFromSec(0.05));
         } catch (const tf2::TransformException & e) {
             RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,

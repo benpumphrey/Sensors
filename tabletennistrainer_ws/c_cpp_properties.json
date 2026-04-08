@@ -1,0 +1,13 @@
+{
+    "configurations": [
+        {
+            "name": "ROS2",
+            "compileCommands": "${workspaceFolder}/build/ttt_control/compile_commands.json",
+            "compilerPath": "/usr/bin/clang++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "macos-clang-arm64",
+        }
+    ],
+    "version": 4
+}
